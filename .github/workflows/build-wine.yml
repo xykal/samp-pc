@@ -1,0 +1,119 @@
+name: Build Wine sendiri (ARM64)
+
+# Pabrik build untuk engine kita sendiri.
+#
+# Kenapa di CI, bukan di sandbox: Wine harus dikompilasi untuk Linux ARM64
+# (glibc), dan runner ubuntu-24.04-arm (native ARM64) tersedia gratis untuk
+# repo publik. Hasilnya dipaketkan persis seperti layer proton di APK:
+#   bin/  lib/wine/{i386-windows,aarch64-windows,aarch64-unix}  share/wine/
+# lalu di-zstd jadi proton-9.0-arm64ec.tar.zst pengganti.
+
+on:
+  workflow_dispatch:
+    inputs:
+      wine_version:
+        description: 'Versi Wine (mis. 9.0, 10.0)'
+        required: true
+        default: '9.0'
+      archs:
+        description: 'Target PE builtins'
+        required: true
+        default: 'i386,aarch64'
+      llvm_mingw:
+        description: 'Pakai llvm-mingw (untuk aarch64-windows.dll)'
+        required: true
+        default: 'true'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+
+    steps:
+      - name: Info mesin
+        run: |
+          uname -a
+          nproc
+          free -h
+          df -h /
+
+      - name: Dependensi host
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gcc g++ make flex bison pkg-config gettext \
+            libx11-dev libxext-dev libxrender-dev libxrandr-dev libxfixes-dev \
+            libxi-dev libxcursor-dev libxcomposite-dev libxinerama-dev \
+            libfreetype-dev libfontconfig-dev libgl-dev libegl-dev libvulkan-dev \
+            libpulse-dev libasound2-dev libdbus-1-dev libgnutls28-dev \
+            libxml2-dev libxslt1-dev libssl-dev zlib1g-dev libpng-dev \
+            libjpeg-dev libtiff-dev libcups2-dev libkrb5-dev libosmesa6-dev \
+            xz-utils zstd curl git
+
+      - name: Ambil llvm-mingw (aarch64-windows PE)
+        if: ${{ inputs.llvm_mingw == 'true' }}
+        run: |
+          set -e
+          URL=$(curl -s https://api.github.com/repos/mstorsjo/llvm-mingw/releases/latest \
+                | python3 -c "import json,sys;d=json.load(sys.stdin);print(next(a['browser_download_url'] for a in d['assets'] if 'ucrt-ubuntu' in a['name'] and 'aarch64' in a['name']))")
+          echo "unduh $URL"
+          curl -sL -o llvm-mingw.tar.xz "$URL"
+          mkdir -p /opt/llvm-mingw
+          tar -xf llvm-mingw.tar.xz -C /opt/llvm-mingw --strip-components=1
+          ls /opt/llvm-mingw/bin | grep -E "mingw32-(gcc|clang)$" | head
+
+      - name: Ambil source Wine
+        run: |
+          set -e
+          V="${{ inputs.wine_version }}"
+          MAJOR="${V%%.*}"
+          curl -sL -o wine.tar.xz "https://dl.winehq.org/wine/source/${MAJOR}.0/wine-${V}.tar.xz"
+          tar -xf wine.tar.xz
+          ls -d wine-* | head
+
+      - name: Configure
+        run: |
+          set -e
+          cd wine-*
+          export PATH=/opt/llvm-mingw/bin:$PATH
+          ./configure \
+            --prefix=/opt/wine \
+            --enable-archs="${{ inputs.archs }}" \
+            --with-x --with-freetype --with-pulse --with-alsa --with-vulkan \
+            --without-oss --without-coreaudio --without-capi \
+            --disable-tests \
+            --verbose 2>&1 | tail -60
+          echo "=== ringkasan configure ==="
+          grep -E "^(  (i386|aarch64|x86_64)-|configure: )" config.log | tail -30 || true
+
+      - name: Compile
+        run: |
+          set -e
+          cd wine-*
+          export PATH=/opt/llvm-mingw/bin:$PATH
+          make -j"$(nproc)" 2>&1 | tail -80
+
+      - name: Install + paketkan
+        run: |
+          set -e
+          cd wine-*
+          make install DESTDIR=/tmp/wineroot 2>&1 | tail -20
+          cd /tmp/wineroot/opt/wine
+          echo "=== struktur ==="
+          du -sh bin lib share 2>/dev/null
+          ls lib/wine 2>/dev/null | head
+          # strip supaya ukuran mirip layer asli (~70 MB zst)
+          find . -type f \( -name '*.so' -o -name 'wine' -o -name 'wineserver' \) \
+               -exec aarch64-linux-gnu-strip --strip-unneeded {} + 2>/dev/null || true
+          tar -c --owner=0 --group=0 . | zstd -19 -T0 -o /tmp/proton-ours.tar.zst
+          ls -l /tmp/proton-ours.tar.zst
+          sha256sum /tmp/proton-ours.tar.zst
+
+      - name: Upload hasil
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wine-ours-arm64
+          path: /tmp/proton-ours.tar.zst
+          if-no-files-found: warn
+          retention-days: 7
