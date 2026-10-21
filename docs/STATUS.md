@@ -21,10 +21,11 @@ Terakhir diperbarui: 2026-10-21
 ## 2. Link
 
 - Repo: https://github.com/xykal/samp-pc
-- **APK gabungan (install ini):**
-  https://github.com/xykal/samp-pc/releases/download/v1.1.0-merged/samp-pc-v1.1.0-merged-debug.apk
+- **APK gabungan (install ini — link publik, tanpa login):**
+  https://github.com/xykal/samp-pc-download/releases/download/v1.1.0/samp-pc-v1.1.0-merged-debug.apk
 - APK frontend saja:
-  https://github.com/xykal/samp-pc/releases/download/v1.0.0/samp-pc-v1.0.0-debug.apk
+  https://github.com/xykal/samp-pc-download/releases/download/v1.1.0/samp-pc-v1.1.0-frontend-debug.apk
+- Halaman unduhan: https://github.com/xykal/samp-pc-download/releases/latest
 - Panduan PC (RAR → ZIP → Drive): `PANDUAN-PC.md`
 - Panduan lama (arsitektur): `PANDUAN.md`, `docs/ONE-APK.md`
 

@@ -6,7 +6,7 @@ frontend yang menyembunyikan emulator.
 ## ⬇️ APK siap pakai
 
 **APK gabungan (engine + frontend, 1 ikon):**
-[`samp-pc-v1.1.0-merged-debug.apk`](https://github.com/xykal/samp-pc/releases/download/v1.1.0-merged/samp-pc-v1.1.0-merged-debug.apk)
+<https://github.com/xykal/samp-pc-download/releases/download/v1.1.0/samp-pc-v1.1.0-merged-debug.apk>
 — 546 MB, arm64-v8a, debug-signed.
 
 Panduan dari nol (RAR di Drive → bisa main): [`PANDUAN-PC.md`](PANDUAN-PC.md).
