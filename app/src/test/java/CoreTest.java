@@ -170,6 +170,25 @@ public class CoreTest {
         check("G36 Box64 konservatif", g36json.contains("BOX64_DYNAREC_BIGBLOCK=0"));
         check("G36 FPS tampil", g36json.contains("\"showFPS\": true"));
 
+        // --------------------------------------------------- 6. Drive downloader
+        System.out.println("\n[6] Link Google Drive");
+        check("bentuk /file/d/ID/view",
+                "FILEID123456789abcd".equals(DriveDownloader.fileId(
+                        "https://drive.google.com/file/d/FILEID123456789abcd/view?usp=sharing")));
+        check("bentuk open?id=",
+                "FILEID123456789abcd".equals(DriveDownloader.fileId(
+                        "https://drive.google.com/open?id=FILEID123456789abcd")));
+        check("bentuk uc?export=download&id=",
+                "FILEID123456789abcd".equals(DriveDownloader.fileId(
+                        "https://drive.google.com/uc?export=download&id=FILEID123456789abcd")));
+        check("bukan link Drive -> null",
+                DriveDownloader.fileId("https://cdn.site.com/a.zip") == null);
+        check("isDrive benar", DriveDownloader.isDrive("https://drive.google.com/file/d/x1234567890/view"));
+        check("isDrive salah", !DriveDownloader.isDrive("https://cdn.site.com/a.zip"));
+        check("directUrl pakai drive.usercontent",
+                DriveDownloader.directUrl("FILEID123456789abcd")
+                        .startsWith("https://drive.usercontent.google.com/download?id=FILEID123456789abcd"));
+
         // ---------------------------------------------------------------- hasil
         System.out.println("\n====================================");
         System.out.println(failed == 0 ? "SEMUA TEST LULUS" : failed + " TEST GAGAL");

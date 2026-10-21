@@ -109,10 +109,16 @@ public class InstallService extends Service {
         File cache = new File(getCacheDir(), "pack.zip");
         postProgress("Mengunduh arsip…", 0, 0, true);
 
-        java.net.HttpURLConnection c = (java.net.HttpURLConnection)
-                new java.net.URL(AppConfig.packArchiveUrl()).openConnection();
-        c.setConnectTimeout(20000);
-        c.setReadTimeout(30000);
+        String url = AppConfig.packArchiveUrl();
+        java.net.HttpURLConnection c;
+        if (com.sampwrap.core.DriveDownloader.isDrive(url)) {
+            // link Drive "share" -> resolve ke file asli (handle halaman konfirmasi)
+            c = com.sampwrap.core.DriveDownloader.open(url);
+        } else {
+            c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            c.setConnectTimeout(20000);
+            c.setReadTimeout(30000);
+        }
         long len = c.getContentLengthLong();
         try (java.io.InputStream in = new java.io.BufferedInputStream(c.getInputStream());
              java.io.FileOutputStream fos = new java.io.FileOutputStream(cache)) {
