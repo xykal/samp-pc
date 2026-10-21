@@ -3,11 +3,22 @@
 Menjalankan **SA-MP versi PC (x86)** di Android lewat Wine + Box64, dengan
 frontend yang menyembunyikan emulator.
 
+## ⬇️ APK siap pakai
+
+**APK gabungan (engine + frontend, 1 ikon):**
+[`samp-pc-v1.1.0-merged-debug.apk`](https://github.com/xykal/samp-pc/releases/download/v1.1.0-merged/samp-pc-v1.1.0-merged-debug.apk)
+— 546 MB, arm64-v8a, debug-signed.
+
+Panduan dari nol (RAR di Drive → bisa main): [`PANDUAN-PC.md`](PANDUAN-PC.md).
+Status teknis lengkap: [`docs/STATUS.md`](docs/STATUS.md).
+
 **Terverifikasi:**
+- ✅ **build di GitHub Actions sukses** — standalone *dan* gabungan dengan fork `StevenMXZ/Winlator-Ludashi@4.1`
 - ✅ semua Java **compile bersih** dengan `android.jar` API 34 (bukan cuma "kelihatan benar")
-- ✅ 31 assertion test core lulus (`CoreTest`)
+- ✅ 38 assertion test core lulus (`CoreTest`), termasuk parsing link Google Drive
 - ✅ manifest data **asli** dari paket Drive kamu: 417 file, **4,71 GB**
-- ✅ dua workflow GitHub Actions valid (standalone & merged)
+- ✅ APK gabungan dicek isinya: `com.sampwrap.*` + `com.winlator.cmod.*` + `libwinlator.so`,
+  manifest hanya punya **1 ikon LAUNCHER**
 
 ---
 
@@ -26,6 +37,8 @@ frontend yang menyembunyikan emulator.
 | `TouchControls` | overlay kontrol custom (JSON, drag-edit, scale) |
 | `ControlsActivity` | layar atur kontrol (geser tombol, simpan) |
 | `WinlatorInputSink` | jembatan event kontrol → engine (refleksi, siap dipasang) |
+| `EngineBridge` | **APK gabungan**: tombol Play langsung ke engine internal lewat refleksi (UI emulator tidak muncul) |
+| `DriveDownloader` | unduh ZIP dari link Google Drive "share" biasa (handle halaman konfirmasi Drive) |
 
 ---
 
