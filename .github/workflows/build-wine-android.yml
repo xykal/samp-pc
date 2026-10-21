@@ -146,6 +146,9 @@ jobs:
           export CFLAGS="-O2 -fPIC -D__ANDROID_API__=${API}"
           # .so bionic (ARM64) ada di imagefs, jangan sampai ke-link lib x86 host
           export LDFLAGS="-L/opt/imagefs/usr/lib -fuse-ld=lld"
+          # LIBRARY_PATH berlaku untuk SEMUA link (Makefile wine tidak selalu
+          # meneruskan LDFLAGS ke aturan link dll) -> ini yang bikin -lX11 ketemu
+          export LIBRARY_PATH="/opt/imagefs/usr/lib"
 
           # bionic tidak punya beberapa fungsi glibc -> beri tahu cache
           export ac_cv_func_getpwent=no ac_cv_func_getpwnam=no ac_cv_func_getpwuid=no
@@ -203,12 +206,10 @@ jobs:
           export NDK=$NDK_HOME
           TC=$NDK/toolchains/llvm/prebuilt/linux-x86_64
           export PATH="$TC/bin:$PATH"
+          export LIBRARY_PATH="/opt/imagefs/usr/lib"
+          export LDFLAGS="-L/opt/imagefs/usr/lib -Wl,-rpath-link,/opt/imagefs/usr/lib -fuse-ld=lld"
           cd build-android
-          # -L ditulis ulang di sini: tiap step shell baru, dan link winex11.so
-          # butuh libX11.so dari imagefs (bionic), bukan dari host x86.
-          make -j"$(nproc)" \
-            LDFLAGS="-L/opt/imagefs/usr/lib -Wl,-rpath-link,/opt/imagefs/usr/lib -fuse-ld=lld" \
-            2>&1 | tail -60
+          make -j"$(nproc)" 2>&1 | tail -60
 
       - name: Hasil + paketkan
         run: |
