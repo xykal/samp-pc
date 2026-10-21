@@ -289,3 +289,34 @@ Tiga opsi: **(A) engine ramping buatan kita** (±425–450 MB, 1–2 hari, risik
 
 **Rilis v1.8.1:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.8.1>  
 `500.815.863 B` · sha256 `d483d5125604558ef6ed7a7f02d1c54f9a644a440d24e8709a852f0ef04fba18`
+
+
+## 15. Engine sendiri (Wine) — pabrik build sudah jalan
+
+User memilih Opsi B: **Wine build sendiri**. Progres nyata:
+
+| Langkah | Hasil |
+|---|---|
+| Workflow `build-wine.yml` di runner **ARM64 native** (`ubuntu-24.04-arm`) | ✅ jalan |
+| Wine 9.0 dari source resmi, `--enable-archs=i386` | ✅ configure + compile |
+| PE builtins `i386-windows` (786 DLL) + `aarch64-unix` (.so) | ✅ |
+| Durasi | ±12 menit |
+| Artefak | `proton-ours.tar.zst` 132 MB (636 MB isi) |
+| Build #1 | ❌ llvm-mingw salah pakai (`libgcc.a` tidak ketemu) → diperbaiki di #2 |
+
+**Temuan penting:** `ntdll.so` bawaan APK adalah
+`ELF 64-bit ARM aarch64, dynamically linked, **for Android**` → layer Proton
+di-compile dengan **NDK/bionic**, bukan glibc. Artefak glibc kita karena itu
+belum bisa dipasang; target build harus `aarch64-linux-android28`.
+
+Resep berikutnya (dari dokumentasi builder publik + bedah APK):
+- Tahap 0: host gcc → native tools (wrc/winebuild/widl) + NLS
+- Tahap 1: NDK clang → `aarch64-linux-android28` (unix side), llvm-mingw i686 → PE `i386-windows`
+- Paket: tar+zstd dengan struktur `bin/ lib/wine/ share/wine/`
+
+NDK hanya tersedia untuk host **x86_64**, jadi build NDK pindah ke runner
+`ubuntu-24.04` (cross-compile tetap ke aarch64). Patch bionic adalah bagian
+yang paling banyak iterasi.
+
+Detail: `docs/WINE-SENDIRI.md`. Engine Proton yang sekarang **tidak disentuh**
+supaya app tetap bisa dipakai.
