@@ -5,17 +5,15 @@ frontend yang menyembunyikan emulator.
 
 ## ⬇️ APK siap pakai
 
-**APK gabungan (engine + frontend, 1 ikon):**
-<https://github.com/xykal/samp-pc-download/releases/download/v1.1.0/samp-pc-v1.1.0-merged-debug.apk>
-— 546 MB, arm64-v8a, debug-signed.
+**APK gabungan v1.2.0:** <https://github.com/xykal/samp-pc-download/releases/download/v1.2.0/samp-pc-v1.2.0-merged-debug.apk>
+— 546 MB, arm64-v8a, debug-signed. Tinggal install → Unduh paket → main.
+Tidak ada langkah PC dan tidak ada link yang perlu ditempel.
 
-Panduan dari nol (RAR di Drive → bisa main): [`PANDUAN-PC.md`](PANDUAN-PC.md).
-Status teknis lengkap: [`docs/STATUS.md`](docs/STATUS.md).
-
-**Terverifikasi:**
+**Terverifikasi:****Terverifikasi:**
 - ✅ **build di GitHub Actions sukses** — standalone *dan* gabungan dengan fork `StevenMXZ/Winlator-Ludashi@4.1`
 - ✅ semua Java **compile bersih** dengan `android.jar` API 34 (bukan cuma "kelihatan benar")
 - ✅ 38 assertion test core lulus (`CoreTest`), termasuk parsing link Google Drive
+- ✅ ekstraksi RAR5 asli diuji di PC: 395 file tier EXTREME → 390 file / 1,60 GB dalam 12 detik
 - ✅ manifest data **asli** dari paket Drive kamu: 417 file, **4,71 GB**
 - ✅ APK gabungan dicek isinya: `com.sampwrap.*` + `com.winlator.cmod.*` + `libwinlator.so`,
   manifest hanya punya **1 ikon LAUNCHER**

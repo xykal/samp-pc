@@ -16,13 +16,15 @@ Terakhir diperbarui: 2026-10-21
 | Deteksi GPU & preset otomatis | ✅ | Adreno/Mali/PowerVR → tier |
 | Kontrol sentuh kustom | ✅ | `control_layout.json` + `ControlsActivity` |
 | CI build via GitHub Actions | ✅ | standalone + merged |
-| Konversi RAR → ZIP di PC | ✅ | `tools/prepare-packs.bat` |
+| **Ekstrak RAR5 di HP** (UnRAR JNI) | ✅ | `libsampunrar.so` — tanpa langkah PC |
+| Client SA-MP otomatis | ✅ | diunduh dari aset rilis (24 MB) |
+| Konversi RAR → ZIP di PC | ⚪ opsional | `tools/prepare-packs.bat`, tak perlu lagi |
 
 ## 2. Link
 
 - Repo: https://github.com/xykal/samp-pc
-- **APK gabungan (install ini — link publik, tanpa login):**
-  https://github.com/xykal/samp-pc-download/releases/download/v1.1.0/samp-pc-v1.1.0-merged-debug.apk
+- **APK gabungan v1.2.0 (install ini — tanpa tempel link apa pun):**
+  https://github.com/xykal/samp-pc-download/releases/download/v1.2.0/samp-pc-v1.2.0-merged-debug.apk
 - APK frontend saja:
   https://github.com/xykal/samp-pc-download/releases/download/v1.1.0/samp-pc-v1.1.0-frontend-debug.apk
 - Halaman unduhan: https://github.com/xykal/samp-pc-download/releases/latest
@@ -31,10 +33,12 @@ Terakhir diperbarui: 2026-10-21
 
 ## 3. Cara pakai (paling singkat)
 
-1. `PANDUAN-PC.md` langkah 1–3 → dapat `pack-extreme.zip` + `samp-install.zip`.
-2. Upload ke Drive, **Share → Anyone with the link**.
-3. Install APK gabungan di HP.
-4. Di app: tempel link Drive → Unduh paket → **Jalankan SA-MP**.
+1. Install APK v1.2.0 di HP.
+2. Buka app → pilih penyimpanan → pilih tier → **Unduh paket**.
+3. Tunggu → **Jalankan SA-MP**.
+
+Tidak ada langkah PC, tidak ada link yang ditempel. Link paket (Drive) dan
+client SA-MP sudah ditanam di dalam APK (`assets/app_config.properties`).
 
 ## 4. Isi APK gabungan (terverifikasi)
 

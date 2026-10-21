@@ -1,3 +1,7 @@
+> **Sejak v1.2.0 kamu tidak perlu panduan ini.** APK bisa membuka RAR5
+> langsung di HP, jadi cukup: install → Unduh paket → main. Halaman ini
+> disimpan untuk yang mau hosting sendiri / pakai mode per-file.
+
 # Panduan PC — dari RAR Google Drive ke APK yang bisa main
 
 Ditulis untuk yang **belum pernah pakai Android Studio / 7-Zip**. Semua langkah
