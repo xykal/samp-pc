@@ -200,12 +200,21 @@ jobs:
       - name: Compile
         run: |
           set -eo pipefail
+          export NDK=$NDK_HOME
+          TC=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+          export PATH="$TC/bin:$PATH"
           cd build-android
-          make -j"$(nproc)" 2>&1 | tail -60
+          # -L ditulis ulang di sini: tiap step shell baru, dan link winex11.so
+          # butuh libX11.so dari imagefs (bionic), bukan dari host x86.
+          make -j"$(nproc)" \
+            LDFLAGS="-L/opt/imagefs/usr/lib -Wl,-rpath-link,/opt/imagefs/usr/lib -fuse-ld=lld" \
+            2>&1 | tail -60
 
       - name: Hasil + paketkan
         run: |
           set -eo pipefail
+          export NDK=$NDK_HOME
+          export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           cd build-android
           make install 2>&1 | tail -10
           cd /opt/wine-ours
