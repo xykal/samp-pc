@@ -48,15 +48,21 @@ cp -r app/app/src/main/assets/control_layout.json winlator-samp/app/src/main/ass
 cp -r app/app/src/main/assets/manifest_default.tsv winlator-samp/app/src/main/assets/
 ```
 
-Ubah `BuildConfig` di app ini menjadi konstanta biasa, atau tambahkan field
-yang sama di `app/build.gradle` fork:
+Tidak perlu `BuildConfig` sama sekali (fork Winlator 4.1 tidak mengaktifkan
+fitur `buildConfig`). Semua konfigurasi dibaca runtime dari
+`assets/app_config.properties` lewat `AppConfig.load(context)`:
 
-```groovy
-buildConfigField "String", "APP_LABEL",        "\"SAMP PC\""
-buildConfigField "String", "DEFAULT_SERVER",   "\"play.domainkamu.com:7777\""
-buildConfigField "String", "PACK_BASE_URL",    "\"https://cdn.domainkamu.com/samp\""
-buildConfigField "String", "PACK_ARCHIVE_URL", "\"\""
+```properties
+app.label=SAMP PC
+server.default=play.domainkamu.com:7777
+pack.baseUrl=https://cdn.domainkamu.com/samp
+pack.archiveUrl=
 ```
+
+Untuk fork Winlator-Ludashi, langkah 2–3 sudah **otomatis** oleh workflow
+`.github/workflows/build-merged.yml` (repo `xykal/samp-pc`): clone fork →
+copy `com/sampwrap` → strip intent-filter LAUNCHER lama → suntik 2 activity
++ service + permission → `assembleDebug`.
 
 ### 3. Jadikan launcher
 
