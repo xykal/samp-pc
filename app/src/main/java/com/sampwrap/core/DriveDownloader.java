@@ -66,6 +66,15 @@ public final class DriveDownloader {
      * Content-Length bisa -1 (chunked) — jangan diasumsikan ada.
      */
     public static HttpURLConnection open(String urlOrId) throws IOException {
+        return open(urlOrId, 0);
+    }
+
+    /**
+     * Buka isi file, mulai dari byte ke-{start} (resume).
+     * Kalau server mengabaikan Range, balasan tetap 200 dan pemanggil harus
+     * mengulang dari nol (cek getResponseCode()).
+     */
+    public static HttpURLConnection open(String urlOrId, long start) throws IOException {
         String id = fileId(urlOrId);
         if (id == null) id = urlOrId != null && urlOrId.matches("[A-Za-z0-9_-]{10,}")
                 ? urlOrId : null;
@@ -76,7 +85,7 @@ public final class DriveDownloader {
         q.put("id", id);
         q.put("export", "download");
 
-        HttpURLConnection c = get(base + "?" + encode(q));
+        HttpURLConnection c = get(base + "?" + encode(q), start);
         String type = String.valueOf(c.getContentType());
         if (!type.contains("html")) return c;           // sudah file asli
 
@@ -93,13 +102,13 @@ public final class DriveDownloader {
         c.disconnect();
 
         // form kedua: baca input tersembunyi (uuid dsb.)
-        HttpURLConnection c2 = get(formAction + "?" + encode(form));
+        HttpURLConnection c2 = get(formAction + "?" + encode(form), start);
         if (String.valueOf(c2.getContentType()).contains("html")) {
             String html = readLimited(c2);
             Matcher mi = FORM_INPUT.matcher(html);
             while (mi.find()) form.put(mi.group(1), mi.group(2).replace("&amp;", "&"));
             c2.disconnect();
-            HttpURLConnection c3 = get(formAction + "?" + encode(form));
+            HttpURLConnection c3 = get(formAction + "?" + encode(form), start);
             if (String.valueOf(c3.getContentType()).contains("html")) {
                 c3.disconnect();
                 throw new IOException("Drive menolak unduhan (kuota / izin). "
@@ -110,18 +119,61 @@ public final class DriveDownloader {
         return c2;
     }
 
-    private static HttpURLConnection get(String url) throws IOException {
+    private static HttpURLConnection get(String url, long start) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(20000);
         c.setReadTimeout(30000);
         c.setInstanceFollowRedirects(true);
         c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) SAMP-PC");
+        if (start > 0) c.setRequestProperty("Range", "bytes=" + start + "-");
         int code = c.getResponseCode();
         if (code >= 400) {
+            String body = snippet(c);
             c.disconnect();
-            throw new IOException("HTTP " + code + " dari Drive");
+            throw new IOException("Drive membalas HTTP " + code
+                    + (body.isEmpty() ? "" : " — " + body));
         }
         return c;
+    }
+
+    /** Beberapa ratus byte pertama body, buat pesan error yang berguna. */
+    private static String snippet(HttpURLConnection c) {
+        try {
+            java.io.InputStream in = c.getErrorStream();
+            if (in == null) return "";
+            byte[] b = new byte[400];
+            int n = in.read(b);
+            in.close();
+            if (n <= 0) return "";
+            String s = new String(b, 0, n, "UTF-8")
+                    .replaceAll("(?s)<[^>]*>", " ")
+                    .replaceAll("\\s+", " ").trim();
+            return s.length() > 200 ? s.substring(0, 200) : s;
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    /** Ringkasan singkat untuk layar Diagnostik (tanpa mengunduh isinya). */
+    public static String probe(String urlOrId) {
+        long t0 = System.currentTimeMillis();
+        HttpURLConnection c = null;
+        try {
+            c = open(urlOrId);
+            int code = c.getResponseCode();
+            String type = String.valueOf(c.getContentType());
+            long len = c.getContentLengthLong();
+            String out = "HTTP " + code
+                    + "\ntipe: " + type
+                    + "\nukuran: " + (len > 0 ? (len / (1024 * 1024)) + " MB (" + len + " B)" : "tidak diketahui")
+                    + "\nwaktu: " + (System.currentTimeMillis() - t0) + " ms";
+            return out;
+        } catch (Throwable e) {
+            String m = e.getMessage() == null ? e.toString() : e.getMessage();
+            return "GAGAL: " + m + "\nwaktu: " + (System.currentTimeMillis() - t0) + " ms";
+        } finally {
+            if (c != null) c.disconnect();
+        }
     }
 
     private static String readLimited(HttpURLConnection c) throws IOException {

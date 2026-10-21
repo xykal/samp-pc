@@ -61,6 +61,9 @@ public class InstallService extends Service {
         running = true;
         failed = false;
         ProgressBus.running(this, -1, "Menyiapkan…");
+        InstallLog.w(this, "=== mulai tier " + tier + " ===");
+        InstallLog.w(this, "sumber: " + (Prefs.effectivePackUrl(this).isEmpty()
+                ? "(per-file) " + AppConfig.packBaseUrl() : Prefs.effectivePackUrl(this)));
         Heartbeat hb = new Heartbeat();
         hb.start();
         boolean ok = false;
@@ -69,7 +72,7 @@ public class InstallService extends Service {
             EnumSet<Manifest.Tag> tags = Manifest.tagsFor(tier);
 
             // Mode A: satu arsip ZIP (lebih simpel untuk hosting)
-            if (!AppConfig.packArchiveUrl().isEmpty()) {
+            if (!Prefs.effectivePackUrl(this).isEmpty()) {
                 downloadArchiveAndExtract(m, tags, tier);
                 return;
             }
@@ -102,6 +105,7 @@ public class InstallService extends Service {
             ok = true;
         } catch (Throwable e) {
             String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+            InstallLog.w(this, "GAGAL: " + msg);
             postFailed(msg);
         } finally {
             running = false;
@@ -158,7 +162,8 @@ public class InstallService extends Service {
         if (space != null) throw new Exception(space.replace('\n', ' '));
 
         postProgress("Mengunduh paket…", 0, 0, true);
-        downloadFile(AppConfig.packArchiveUrl(), arc);
+        downloadFile(Prefs.effectivePackUrl(this), arc, "paket",
+                m.totalSize(tags) + 300L * 1024 * 1024);
 
         if (isRar(arc)) {
             installRar(arc, m, tags, tmp, game);
@@ -228,7 +233,7 @@ public class InstallService extends Service {
         if (url.isEmpty()) return;
         postProgress("Mengunduh client SA-MP…", 0, 0, true);
         File zip = new File(tmp, "client.zip");
-        downloadFile(url, zip);
+        downloadFile(url, zip, "client SA-MP", 0);
         postProgress("Memasang SA-MP…", 0, 0, true);
         unzipTo(zip, game);
         zip.delete();
@@ -262,45 +267,95 @@ public class InstallService extends Service {
         return new File(game.getParentFile() != null ? game.getParentFile() : game, ".tmp");
     }
 
-    /** Unduh dengan resume (HTTP Range) + progress notifikasi. */
-    private void downloadFile(String url, File dst) throws Exception {
-        long have = dst.isFile() ? dst.length() : 0;
-        java.net.HttpURLConnection c;
-        if (com.sampwrap.core.DriveDownloader.isDrive(url)) {
-            c = com.sampwrap.core.DriveDownloader.open(url);
-        } else {
-            c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-            c.setConnectTimeout(20000);
-            c.setReadTimeout(30000);
-        }
-        if (have > 0) c.setRequestProperty("Range", "bytes=" + have + "-");
+    /**
+     * Unduh dengan resume (HTTP Range), retry, dan log.
+     *
+     * Kenapa begini: unduhan 712 MB di jaringan HP putus-nyambung. Tanpa retry
+     * + resume, satu timeout = "gagal mengunduh" dan user harus mulai dari nol.
+     */
+    private void downloadFile(String url, File dst, String label, long extraNeeded) throws Exception {
+        final int MAX = 6;
+        Exception last = null;
 
-        int code = c.getResponseCode();
-        if (code == 416) return;                       // sudah lengkap
-        if (code != 200 && code != 206) throw new Exception("HTTP " + code);
-
-        long len = c.getContentLengthLong();
-        long total = code == 206 ? have + len : len;
-        boolean append = code == 206;
-        if (!append) have = 0;
-
-        try (java.io.InputStream in = new java.io.BufferedInputStream(c.getInputStream());
-             java.io.FileOutputStream fos = new java.io.FileOutputStream(dst, append)) {
-            byte[] buf = new byte[128 * 1024];
-            long done = have;
-            int n;
-            while ((n = in.read(buf)) > 0) {
-                fos.write(buf, 0, n);
-                done += n;
-                if (total > 0) {
-                    postProgress("Mengunduh " + (100 * done / total) + "%  ("
-                            + (done >> 20) + "/" + (total >> 20) + " MB)",
-                            (int) (done >> 20), (int) (total >> 20), false);
+        for (int attempt = 1; attempt <= MAX; attempt++) {
+            long have = dst.isFile() ? dst.length() : 0;
+            java.net.HttpURLConnection c = null;
+            try {
+                InstallLog.w(this, "unduh " + label + " #" + attempt + " mulai byte " + have);
+                if (com.sampwrap.core.DriveDownloader.isDrive(url)) {
+                    c = com.sampwrap.core.DriveDownloader.open(url, have);
+                } else {
+                    c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                    c.setConnectTimeout(20000);
+                    c.setReadTimeout(45000);
+                    if (have > 0) c.setRequestProperty("Range", "bytes=" + have + "-");
                 }
+
+                int code = c.getResponseCode();
+                String type = String.valueOf(c.getContentType());
+                long len = c.getContentLengthLong();
+                InstallLog.w(this, "  HTTP " + code + " tipe=" + type + " panjang=" + len);
+
+                if (code == 416) { InstallLog.w(this, "  sudah lengkap (416)"); return; }
+                if (code != 200 && code != 206) throw new Exception("server membalas HTTP " + code);
+                if (type.contains("html")) {
+                    throw new Exception("server kirim halaman HTML, bukan file "
+                            + "(biasanya kuota Drive habis atau link tidak publik)");
+                }
+
+                long total = code == 206 ? have + len : len;
+                boolean append = code == 206 && have > 0;
+                if (!append) have = 0;
+
+                // ruang dicek setelah ukuran sebenarnya ketahuan
+                String space = StorageTarget.checkSpace(dst.getParentFile(),
+                        Math.max(0, total - have) + extraNeeded);
+                if (space != null) throw new Exception(space.replace('\n', ' '));
+
+                postProgress("Mengunduh " + label + "…", -1, 0, false);
+
+                try (java.io.InputStream in = new java.io.BufferedInputStream(c.getInputStream(), 128 * 1024);
+                     java.io.FileOutputStream fos = new java.io.FileOutputStream(dst, append)) {
+                    byte[] buf = new byte[128 * 1024];
+                    long done = have;
+                    int n;
+                    while ((n = in.read(buf)) > 0) {
+                        fos.write(buf, 0, n);
+                        done += n;
+                        if (total > 0) {
+                            postProgress("Mengunduh " + label + " " + (100 * done / total) + "%  ("
+                                    + (done >> 20) + "/" + (total >> 20) + " MB)",
+                                    (int) (done >> 20), (int) (total >> 20), false);
+                        } else {
+                            postProgress("Mengunduh " + label + "  (" + (done >> 20) + " MB)",
+                                    -1, 0, false);
+                        }
+                    }
+                }
+
+                long got = dst.isFile() ? dst.length() : 0;
+                if (total > 0 && got < total) {
+                    throw new Exception("koneksi terputus di " + (got >> 20) + "/" + (total >> 20) + " MB");
+                }
+                InstallLog.w(this, "  selesai " + got + " byte");
+                return;
+            } catch (Exception e) {
+                last = e;
+                String m = e.getMessage() == null ? e.toString() : e.getMessage();
+                InstallLog.w(this, "  gagal: " + m);
+                if (attempt < MAX) {
+                    int wait = Math.min(15, attempt * 2);
+                    postProgress("Gagal (" + m + ") — coba lagi " + attempt + "/" + (MAX - 1)
+                            + " dalam " + wait + " dtk…", -1, 0, false);
+                    try { Thread.sleep(wait * 1000L); } catch (InterruptedException ie) { return; }
+                }
+            } finally {
+                if (c != null) c.disconnect();
             }
-        } finally {
-            c.disconnect();
         }
+
+        String m = last == null || last.getMessage() == null ? "tidak diketahui" : last.getMessage();
+        throw new Exception("Unduhan gagal setelah " + MAX + " percobaan. Terakhir: " + m);
     }
 
     /** Unzip sederhana + proteksi zip-slip. */

@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
 
     private UiDialog.Progress liveProgress;
     private volatile boolean progressHidden;
+    private String lastTier = "lite";
     private final Runnable progressPoll = new Runnable() {
         @Override public void run() {
             ProgressBus pb = ProgressBus.read(MainActivity.this);
@@ -86,8 +87,9 @@ public class MainActivity extends Activity {
                 new UiDialog.Alert(MainActivity.this)
                         .title("Gagal mengunduh")
                         .message(pb.text)
-                        .negative("Lihat log", () -> showCrashLog())
-                        .positive("Tutup", null)
+                        .neutral("Diagnostik", () -> showDiagnostics())
+                        .negative("Lihat log", () -> showInstallLog())
+                        .positive("Coba lagi", () -> startDownload(lastTier))
                         .show();
             }
         }
@@ -131,6 +133,113 @@ public class MainActivity extends Activity {
                 .negative("Hapus", () -> CrashGuard.clear(this))
                 .positive("Tutup", null)
                 .show();
+    }
+
+    /** Log langkah unduhan (install.log) + tombol salin. */
+    private void showInstallLog() {
+        String log = InstallLog.read(this);
+        new UiDialog.Alert(this)
+                .title("Log unduhan")
+                .message(log)
+                .neutral("Salin", () -> copy("install.log", log))
+                .negative("Hapus", () -> InstallLog.clear(this))
+                .positive("Tutup", null)
+                .show();
+    }
+
+    private void copy(String label, String text) {
+        try {
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null) cm.setPrimaryClip(
+                    android.content.ClipData.newPlainText(label, text));
+            toast("Disalin ke clipboard");
+        } catch (Throwable t) {
+            toast("Gagal menyalin: " + t);
+        }
+    }
+
+    /**
+     * Diagnostik: semua yang dibutuhkan untuk tahu kenapa unduhan gagal,
+     * dalam satu layar.
+     */
+    /** Kalau file Drive kena limit kuota: user bisa tempel link salinannya sendiri. */
+    private void showPackLinkDialog() {
+        UiDialog.input(this, "Ganti link paket",
+                "Tempel link Google Drive (atau kosongkan untuk kembali ke bawaan)",
+                Prefs.packUrl(this), val -> {
+                    String v = val.trim();
+                    if (v.isEmpty()) {
+                        Prefs.setPackUrl(this, "");
+                        toast("Kembali ke link bawaan");
+                        return;
+                    }
+                    if (com.sampwrap.core.DriveDownloader.fileId(v) == null) {
+                        toast("Link Drive tidak dikenali");
+                        return;
+                    }
+                    Prefs.setPackUrl(this, v);
+                    toast("Link paket disimpan");
+                });
+    }
+
+    private void showDiagnostics() {
+        Spinner sp = new Spinner(this, "Memeriksa…");
+        sp.show();
+        new Thread(() -> {
+            StringBuilder sb = new StringBuilder();
+            try {
+                String ver = "?";
+                try {
+                    android.content.pm.PackageInfo pi =
+                            getPackageManager().getPackageInfo(getPackageName(), 0);
+                    ver = pi.versionName + " (" + pi.versionCode + ")";
+                } catch (Throwable ignored) {}
+                sb.append("APP     : ").append(AppConfig.appLabel()).append("  v").append(ver).append('\n');
+                sb.append("PAKET   : ").append(getPackageName()).append('\n');
+                sb.append("ABI     : ").append(android.text.TextUtils.join(", ",
+                        android.os.Build.SUPPORTED_ABIS)).append('\n');
+                sb.append("HP      : ").append(android.os.Build.MANUFACTURER).append(' ')
+                        .append(android.os.Build.MODEL).append(" · Android ")
+                        .append(android.os.Build.VERSION.RELEASE)
+                        .append(" (API ").append(android.os.Build.VERSION.SDK_INT).append(")\n");
+
+                File dir = GameDir.get(this);
+                long free = StorageTarget.freeBytes(dir);
+                sb.append("FOLDER  : ").append(dir.getAbsolutePath()).append('\n');
+                sb.append("MODE    : ").append(StorageTarget.currentMode(this)).append('\n');
+                sb.append("RUANG   : bebas ").append(free < 0 ? "?" : Manifest.humanSize(free)).append('\n');
+                sb.append("DATA    : ").append(Manifest.humanSize(GameDir.size(dir))).append('\n');
+
+                String url = Prefs.effectivePackUrl(this);
+                sb.append("SUMBER  : ").append(url.isEmpty() ? "(kosong!)" : url).append('\n');
+
+                sb.append("\n--- TES KE SERVER ---\n");
+                if (!url.isEmpty()) {
+                    if (com.sampwrap.core.DriveDownloader.isDrive(url)) {
+                        sb.append(com.sampwrap.core.DriveDownloader.probe(url)).append('\n');
+                    } else {
+                        sb.append("URL biasa (bukan Drive)\n");
+                    }
+                } else {
+                    sb.append("URL paket kosong.\n");
+                }
+
+                sb.append("\n--- LOG TERAKHIR ---\n").append(InstallLog.read(this));
+            } catch (Throwable t) {
+                sb.append("\nDiagnostik error: ").append(t);
+            }
+            final String report = sb.toString();
+            ui.post(() -> {
+                sp.dismiss();
+                new UiDialog.Alert(MainActivity.this)
+                        .title("Diagnostik")
+                        .message(report.length() > 2500 ? report.substring(0, 2500) + "\n…" : report)
+                        .neutral("Salin", () -> copy("diagnostik", report))
+                        .positive("Tutup", null)
+                        .show();
+            });
+        }, "diagnostics").start();
     }
 
     private void showCrashLog() {
@@ -195,6 +304,10 @@ public class MainActivity extends Activity {
         packCard.addView(action("Impor dari file ZIP", false, v -> pickZip(REQ_PACK_ZIP)));
         packCard.addView(UiKit.gap(this, 8));
         packCard.addView(action("Lokasi penyimpanan", false, v -> showStorageDialog()));
+        packCard.addView(UiKit.gap(this, 8));
+        packCard.addView(action("Diagnostik (kalau gagal)", false, v -> showDiagnostics()));
+        packCard.addView(UiKit.gap(this, 8));
+        packCard.addView(action("Ganti link paket (opsional)", false, v -> showPackLinkDialog()));
         root.addView(packCard);
 
         root.addView(UiKit.gap(this, 14));
@@ -347,7 +460,8 @@ public class MainActivity extends Activity {
     }
 
     private void startDownload(String tier) {
-        if (AppConfig.packBaseUrl().isEmpty() && AppConfig.packArchiveUrl().isEmpty()) {
+        lastTier = tier;
+        if (AppConfig.packBaseUrl().isEmpty() && Prefs.effectivePackUrl(this).isEmpty()) {
             toast("Isi PACK_BASE_URL atau PACK_ARCHIVE_URL di gradle.properties");
             return;
         }
@@ -484,8 +598,8 @@ public class MainActivity extends Activity {
                     + "Resolusi  : " + preset.screenSize + "\n"
                     + "Driver    : " + preset.graphicsDriver + " + " + preset.dxWrapper + "\n"
                     + "Target    : " + preset.fpsTarget + " fps\n\n"
-                    + "Cara pakai di Winlator:\n"
-                    + "1. Salin .container ke folder container Winlator (butuh root)\n"
+                    + "Cara pakai di engine:\n"
+                    + "1. Salin .container ke folder container engine (butuh root)\n"
                     + "   ATAU buat container baru lalu samakan nilainya manual.\n"
                     + "2. Jalankan setup-samp.sh (ada di repo) dengan argumen:\n"
                     + "   " + args + "\n";
@@ -632,7 +746,7 @@ public class MainActivity extends Activity {
         new UiDialog.Alert(this)
                 .setTitle("Engine belum terpasang")
                 .setMessage("Folder game sudah siap di:\n" + GameDir.describe(this)
-                        + "\n\nBuka lewat Winlator (atau build APK gabungan, lihat README), "
+                        + "\n\nBuka lewat engine (atau build APK gabungan, lihat README), "
                         + "lalu jalankan samp.exe dari folder itu.")
                 .setPositiveButton("OK", null)
                 .show();

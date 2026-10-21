@@ -10,6 +10,7 @@ public final class Prefs {
     private static final String K_NICK = "nick";
     private static final String K_SERVER = "server";
     private static final String K_MODS_DONE = "mods_done";
+    private static final String K_PACK_URL = "pack_url";
 
     private Prefs() {}
 
@@ -23,6 +24,21 @@ public final class Prefs {
 
     public static void setPack(Context c, String v) {
         sp(c).edit().putString(K_PACK, v).apply();
+    }
+
+    /** Link Drive pilihan user (menimpa link bawaan APK). Kosong = pakai bawaan. */
+    public static String packUrl(Context c) {
+        return sp(c).getString(K_PACK_URL, "");
+    }
+
+    public static void setPackUrl(Context c, String v) {
+        sp(c).edit().putString(K_PACK_URL, v == null ? "" : v.trim()).apply();
+    }
+
+    /** Sumber paket yang benar-benar dipakai. */
+    public static String effectivePackUrl(Context c) {
+        String own = packUrl(c);
+        return own.isEmpty() ? AppConfig.packArchiveUrl() : own;
     }
 
     public static String nick(Context c) {

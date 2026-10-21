@@ -94,6 +94,44 @@ jobs:
           cp -f "$S/values/ic_launcher_bg.xml" "$R/values/"
           ls -l "$R/mipmap-xxhdpi" | head
 
+      - name: Hapus tulisan "Winlator" di resource engine
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+
+          # 1) resource XML: hanya isi teks & nilai atribut
+          n_res = 0
+          for f in pathlib.Path('winlator/app/src/main/res').rglob('*.xml'):
+              s = f.read_text(errors='ignore')
+              t = re.sub(r'>([^<>]*)<',
+                         lambda m: '>' + m.group(1).replace('Winlator', 'XversSamp') + '<', s)
+              t = t.replace('="Winlator', '="XversSamp')
+              t = t.replace('"Winlator:X11"', '"XversSamp:X11"')
+              if t != s:
+                  f.write_text(t)
+                  n_res += 1
+
+          # 2) kode Java/Kotlin: HANYA di dalam string literal, supaya nama
+          #    class (WinlatorHUD, WinlatorTheme...) dan package tetap utuh
+          n_src = 0
+          for ext in ('*.java', '*.kt'):
+              for f in pathlib.Path('winlator/app/src/main/java').rglob(ext):
+                  s = f.read_text(errors='ignore')
+                  def fix(m):
+                      lit = m.group(1)
+                      # jangan sentuh nama class/package di dalam string
+                      if 'com.winlator' in lit or 'Lcom/' in lit or '$' in lit:
+                          return m.group(0)
+                      return '"' + lit.replace('Winlator', 'XversSamp') + '"'
+                  t = re.sub(r'"([^"\n]*)"', fix, s)
+                  if t != s:
+                      f.write_text(t)
+                      n_src += 1
+
+          print('resource diubah:', n_res, '| source diubah:', n_src)
+          PY
+          grep -rn "Winlator" winlator/app/src/main/res/values/strings.xml | head -5 || true
+
       - name: Tempel source + assets SAMP PC
         run: |
           set -e
