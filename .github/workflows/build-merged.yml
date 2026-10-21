@@ -99,8 +99,8 @@ jobs:
           set -e
           CPP=winlator/app/src/main/cpp
           mkdir -p "$CPP/sampunrar/unrar"
-          cp -r native/unrar/. "$CPP/sampunrar/unrar/"
-          cp native/sampunrar_jni.cpp "$CPP/sampunrar/"
+          cp -r samp/native/unrar/. "$CPP/sampunrar/unrar/"
+          cp samp/native/sampunrar_jni.cpp "$CPP/sampunrar/"
 
           cat >> "$CPP/CMakeLists.txt" <<'CMAKE'
 
