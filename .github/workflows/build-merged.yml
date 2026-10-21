@@ -177,6 +177,16 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # CMakeLists fork memanggil "glslangValidator" (bukan glslc NDK) untuk
+      # meng-compile window.vert/window.frag. Tanpa ini build mati dengan
+      # "/bin/sh: 1: glslangValidator: not found".
+      - name: Pasang glslang-tools (compiler shader)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq glslang-tools || sudo apt-get install -y -qq glslang
+          which glslangValidator || ls -l /usr/bin/glslang* || true
+          glslangValidator --version | head -3 || true
+
       - name: Build APK gabungan
         working-directory: winlator
         run: |
