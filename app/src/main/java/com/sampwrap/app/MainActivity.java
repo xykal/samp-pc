@@ -477,7 +477,7 @@ public class MainActivity extends Activity {
 
             String json = cp.toContainerJson(1);
             String args = cp.toSetupArgs(Prefs.nick(this), Prefs.server(this));
-            String readme = "SAMP PC — preset container\n"
+            String readme = AppConfig.appLabel() + " — preset container\n"
                     + "===========================\n\n"
                     + "Perangkat : " + spec.soc + " / " + spec.gpu + "\n"
                     + "Tier      : " + preset.tier + "\n"

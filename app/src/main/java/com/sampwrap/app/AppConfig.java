@@ -38,7 +38,7 @@ public final class AppConfig {
     }
 
     public static String appLabel() {
-        return get("app.label", "SAMP PC");
+        return get("app.label", "XversSamp");
     }
 
     public static String defaultServer() {

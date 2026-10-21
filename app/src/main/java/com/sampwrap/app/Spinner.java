@@ -15,7 +15,7 @@ public final class Spinner {
     private boolean showing;
 
     public Spinner(Context c, String message) {
-        this.p = UiDialog.progress(c, "SAMP PC", message);
+        this.p = UiDialog.progress(c, AppConfig.appLabel(), message);
     }
 
     public Spinner setMessage(String m) {

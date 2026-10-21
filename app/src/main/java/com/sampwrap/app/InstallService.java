@@ -376,7 +376,7 @@ public class InstallService extends Service {
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
         Notification.Builder b = new Notification.Builder(this, CHANNEL)
-                .setContentTitle("SAMP PC — paket data")
+                .setContentTitle(AppConfig.appLabel() + " — paket data")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setOngoing(!indeterminate)
