@@ -154,6 +154,19 @@ jobs:
           export ac_cv_func_openpty=yes ac_cv_func_fork=yes
           unset PKG_CONFIG_PATH
 
+          # soname dari imagefs (bionic). Tanpa ini configure tidak menemukan
+          # -lX11 dan menghasilkan "SONAME_LIBX11 undeclared" saat compile.
+          export ac_cv_lib_soname_X11=libX11.so.6
+          export ac_cv_lib_soname_XEXT=libXext.so.6
+          export ac_cv_lib_soname_XRENDER=libXrender.so.1
+          export ac_cv_lib_soname_XRANDR=libXrandr.so.2
+          export ac_cv_lib_soname_XFIXES=libXfixes.so.3
+          export ac_cv_lib_soname_XCURSOR=libXcursor.so.1
+          export ac_cv_lib_soname_XCOMPOSITE=libXcomposite.so.1
+          export ac_cv_lib_soname_XI=libXi.so.6
+          export ac_cv_lib_soname_XINERAMA=libXinerama.so.1
+          export ac_cv_lib_soname_X11_XCB=libX11-xcb.so.1
+
           # configure kadang mengabaikan --without-* saat cross; paksa lewat env
           with_x=yes enable_wineandroid_drv=no with_freetype=no with_fontconfig=no with_vulkan=no \
           with_pulse=no with_alsa=no with_oss=no with_gstreamer=no with_dbus=no \
