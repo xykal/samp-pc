@@ -5,7 +5,9 @@ frontend yang menyembunyikan emulator.
 
 ## ⬇️ APK siap pakai
 
-**APK gabungan v1.4.0 (terbaru):** <https://github.com/xykal/samp-pc-download/releases/download/v1.4.0/samp-pc-v1.4.0-merged.apk>  
+**APK gabungan v1.5.0 (XversSamp):** <https://github.com/xykal/samp-pc-download/releases/download/v1.5.0/xverssamp-v1.5.0-merged.apk>  
+v1.4.0: <https://github.com/xykal/samp-pc-download/releases/download/v1.4.0/samp-pc-v1.4.0-merged.apk>  
+v1.3.0: <https://github.com/xykal/samp-pc-download/releases/download/v1.3.0/samp-pc-v1.3.0-merged.apk>
 v1.3.0 sebelumnya: <https://github.com/xykal/samp-pc-download/releases/download/v1.3.0/samp-pc-v1.3.0-merged.apk>
 — 546 MB, arm64-v8a, debug-signed. Tinggal install → Unduh paket → main.
 Tidak ada langkah PC dan tidak ada link yang perlu ditempel.

@@ -130,3 +130,21 @@ dan `splits.abi` ditolak AGP selama `abiFilters` aktif. v7a butuh engine
 32-bit yang benar-benar lain (Wine 32-bit + **Box86**, bukan Box64) — itu porting
 terpisah, bukan pemisahan APK. Emulator x86 seperti MEmu juga tidak bisa
 menjalankan APK arm64 kecuali image-nya punya ARM translation.
+
+
+## 9. v1.5.0 — XversSamp (nama + ikon)
+
+Permintaan: *"Ganti juga icon app nama app Misal XversSamp"* — dan user
+mengonfirmasi APK bisa di-install di MEmu; untuk 32-bit diputuskan fokus dulu
+ke arm64.
+
+| Item | Jadi |
+|---|---|
+| Nama app | **XversSamp** (`app.label` di `assets/app_config.properties`, `@string/app_name`, label manifest) |
+| Ikon | huruf **X** oranye `#F0A020` + titik teal `#78C8BE`, latar gelap `#1B2230→#14181F` |
+| Adaptive icon | `mipmap-anydpi-v26/ic_launcher{,_round}.xml` → `@color/ic_launcher_bg` + `@mipmap/ic_launcher_fore` |
+| Sumber ikon | `branding/res/mipmap-*` (di-generate dari `branding/icon_512.png`), di-copy workflow ke res fork |
+| Launcher | tetap 1 (ikon Winlator dihapus total) |
+
+**Rilis:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.5.0>  
+`500.797.883 B` · sha256 `255aea2bb9d7a5de58a9413ed326dff696ba11d82c8696c9ac545a1007d7dbec` · arm64-v8a
