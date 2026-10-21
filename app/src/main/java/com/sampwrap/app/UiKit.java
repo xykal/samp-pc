@@ -65,6 +65,11 @@ public final class UiKit {
         return b;
     }
 
+    /** Warna garis tipis untuk border kartu/dialog. */
+    public static int line(Context c) {
+        return Color.rgb(48, 56, 68);
+    }
+
     public static View gap(Context c, int dp) {
         View v = new View(c);
         v.setLayoutParams(new LinearLayout.LayoutParams(

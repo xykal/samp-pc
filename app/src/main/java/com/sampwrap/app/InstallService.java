@@ -27,6 +27,8 @@ public class InstallService extends Service {
     private static final int NOTIF_ID = 41;
 
     private volatile boolean running;
+    private volatile boolean failed;
+    private volatile String failMsg;
     private PackDownloader downloader;
     private Thread worker;
 
@@ -57,6 +59,11 @@ public class InstallService extends Service {
 
     private void download(String tier) {
         running = true;
+        failed = false;
+        ProgressBus.running(this, -1, "Menyiapkan…");
+        Heartbeat hb = new Heartbeat();
+        hb.start();
+        boolean ok = false;
         try {
             Manifest m = ManifestStore.load(this);
             EnumSet<Manifest.Tag> tags = Manifest.tagsFor(tier);
@@ -71,10 +78,7 @@ public class InstallService extends Service {
 
             // cek ruang sebelum mulai (biar nggak gagal di tengah 4 GB)
             String space = StorageTarget.checkSpace(target, m.totalSize(tags));
-            if (space != null) {
-                postProgress(space.replace("\n", " "), 0, 0, true);
-                return;
-            }
+            if (space != null) throw new Exception(space.replace('\n', ' '));
             downloader = new PackDownloader(m, tags, target, new PackDownloader.Listener() {
                 @Override public void onFileStart(String path, int index, int total) {
                     postProgress(basename(path), index, total, false);
@@ -87,19 +91,51 @@ public class InstallService extends Service {
                 @Override public void onFileDone(String path, boolean resumed) { }
 
                 @Override public void onError(String path, Exception e) {
-                    postProgress("Gagal: " + basename(path) + " — " + e.getMessage(), 0, 0, true);
+                    postFailed("Gagal: " + basename(path) + " — " + e.getMessage());
                 }
             });
 
             PackDownloader.Stats st = downloader.run();
+            if (failed) throw new Exception(failMsg == null ? "Unduhan gagal" : failMsg);
             Prefs.setPack(this, tier);
-            postProgress("Selesai: " + st.toString(), 0, 0, true);
-        } catch (Exception e) {
-            postProgress("Gagal: " + e.getMessage(), 0, 0, true);
+            postProgress("Selesai — game siap dijalankan", 100, 100, true);
+            ok = true;
+        } catch (Throwable e) {
+            String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+            postFailed(msg);
         } finally {
             running = false;
-            stopForeground(false);
+            hb.halt();
+            // Sukses: bersihkan notifikasi. Gagal: biarkan terlihat.
+            if (ok) {
+                stopForeground(true);
+                NotificationManager nm = getSystemService(NotificationManager.class);
+                if (nm != null) nm.cancel(NOTIF_ID);
+            } else {
+                stopForeground(false);
+            }
             stopSelf();
+        }
+    }
+
+    /**
+     * Detak progress tiap 3 detik. Gunanya: kalau proses ":sync" mati mendadak
+     * (crash native unrar), file progress berhenti ter-update dan UI bisa
+     * menyimpulkan sendiri bahwa unduhan gagal — bukan menggantung selamanya.
+     */
+    private final class Heartbeat extends Thread {
+        private volatile boolean live = true;
+        Heartbeat() { super("progress-heartbeat"); setDaemon(true); }
+        void halt() { live = false; }
+        @Override public void run() {
+            while (live && running) {
+                try { Thread.sleep(3000); } catch (InterruptedException e) { return; }
+                if (!live || !running) return;
+                ProgressBus pb = ProgressBus.read(InstallService.this);
+                if (pb.state == ProgressBus.RUNNING) {
+                    ProgressBus.running(InstallService.this, pb.pct, pb.text);
+                }
+            }
         }
     }
 
@@ -119,10 +155,7 @@ public class InstallService extends Service {
 
         File game = GameDir.get(this);
         String space = StorageTarget.checkSpace(game, m.totalSize(tags) + 800L * 1024 * 1024);
-        if (space != null) {
-            postProgress(space.replace("\n", " "), 0, 0, true);
-            return;
-        }
+        if (space != null) throw new Exception(space.replace('\n', ' '));
 
         postProgress("Mengunduh paket…", 0, 0, true);
         downloadFile(AppConfig.packArchiveUrl(), arc);
@@ -298,10 +331,43 @@ public class InstallService extends Service {
         return i >= 0 ? p.substring(i + 1) : p;
     }
 
+    private long lastBusWrite;
+
+    /**
+     * Update progress: ke UI (lewat ProgressBus, karena service jalan di proses
+     * terpisah) dan ke notifikasi. File progress ditulis maks 4x/detik supaya
+     * tidak membanjiri I/O saat unduh 680 MB.
+     */
     private void postProgress(String text, int index, int total, boolean done) {
-        int pct = total > 0 ? (int) (100L * index / total) : 0;
+        int pct = total > 0 ? (int) Math.min(100, 100L * index / total) : -1;
+
+        long now = System.currentTimeMillis();
+        if (done || now - lastBusWrite > 250) {
+            lastBusWrite = now;
+            if (done) {
+                ProgressBus.done(this, text);
+            } else {
+                ProgressBus.running(this, pct, text);
+            }
+        }
+
         NotificationManager nm = getSystemService(NotificationManager.class);
-        if (nm != null) nm.notify(NOTIF_ID, buildNotification(text, pct, total, done));
+        if (nm != null) {
+            try {
+                nm.notify(NOTIF_ID, buildNotification(text, Math.max(pct, 0), total, done));
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private void postFailed(String text) {
+        failed = true;
+        failMsg = text;
+        ProgressBus.failed(this, text);
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        if (nm != null) {
+            try { nm.notify(NOTIF_ID, buildNotification("Gagal: " + text, 0, 0, true)); }
+            catch (Throwable ignored) {}
+        }
     }
 
     private Notification buildNotification(String text, int pct, int total, boolean indeterminate) {

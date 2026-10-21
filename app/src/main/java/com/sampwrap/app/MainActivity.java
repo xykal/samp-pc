@@ -1,8 +1,6 @@
 package com.sampwrap.app;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.ProgressDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -45,14 +43,103 @@ public class MainActivity extends Activity {
     private DeviceProfile.Preset preset;
     private Manifest manifest;
 
+    private UiDialog.Progress liveProgress;
+    private volatile boolean progressHidden;
+    private final Runnable progressPoll = new Runnable() {
+        @Override public void run() {
+            ProgressBus pb = ProgressBus.read(MainActivity.this);
+            if (pb.state == ProgressBus.RUNNING
+                    && System.currentTimeMillis() - pb.updatedAt > 25000) {
+                // proses ":sync" mati mendadak (crash native) -> jangan menggantung
+                hideProgress();
+                ProgressBus.failed(MainActivity.this,
+                        "Proses berhenti mendadak saat: " + pb.text);
+                ui.post(this);
+                return;
+            }
+            if (pb.state == ProgressBus.RUNNING) {
+                if (!progressHidden) {
+                    if (liveProgress == null) {
+                        liveProgress = UiDialog.progress(MainActivity.this,
+                                "Mengunduh paket data", pb.text);
+                        liveProgress.onCancel(() -> progressHidden = true);
+                        liveProgress.show();
+                    }
+                    liveProgress.show();
+                    liveProgress.update(pb.text, pb.pct);
+                }
+                ui.postDelayed(this, 400);
+            } else if (pb.state == ProgressBus.DONE) {
+                hideProgress();
+                progressHidden = false;
+                ProgressBus.idle(MainActivity.this);
+                refreshStorage();
+                new UiDialog.Alert(MainActivity.this)
+                        .title("Paket siap")
+                        .message("Data sudah diekstrak.\n\nTekan \"Jalankan SA-MP\" untuk mulai.")
+                        .positive("Oke", null)
+                        .show();
+            } else if (pb.state == ProgressBus.FAILED) {
+                hideProgress();
+                progressHidden = false;
+                ProgressBus.idle(MainActivity.this);
+                new UiDialog.Alert(MainActivity.this)
+                        .title("Gagal mengunduh")
+                        .message(pb.text)
+                        .negative("Lihat log", () -> showCrashLog())
+                        .positive("Tutup", null)
+                        .show();
+            }
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        CrashGuard.install(this);
         AppConfig.load(this);
         setContentView(buildUi());
         askNotificationPermission();
         scanDevice();
         loadManifest();
+        showLastCrashIfAny();
+        ui.post(progressPoll);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (manifest != null) refreshStorage();
+        ui.removeCallbacks(progressPoll);
+        ui.post(progressPoll);
+    }
+
+    private void hideProgress() {
+        if (liveProgress != null) {
+            liveProgress.dismiss();
+            liveProgress = null;
+        }
+    }
+
+    /** Tampilkan crash terakhir (kalau ada) supaya kelihatan penyebabnya. */
+    private void showLastCrashIfAny() {
+        final String log = CrashGuard.last(this);
+        if (log == null) return;
+        new UiDialog.Alert(this)
+                .title("App terakhir crash")
+                .message(log.length() > 1200 ? log.substring(0, 1200) + "\n…" : log)
+                .negative("Hapus", () -> CrashGuard.clear(this))
+                .positive("Tutup", null)
+                .show();
+    }
+
+    private void showCrashLog() {
+        String log = CrashGuard.last(this);
+        new UiDialog.Alert(this)
+                .title("Log terakhir")
+                .message(log == null ? "Tidak ada log." : log)
+                .positive("Tutup", null)
+                .show();
     }
 
     // ------------------------------------------------------------------ UI ----
@@ -233,7 +320,7 @@ public class MainActivity extends Activity {
                         + (rec.equals(Manifest.TIER_FULL) ? mark : "")
         };
 
-        new AlertDialog.Builder(this)
+        new UiDialog.Alert(this)
                 .setTitle("Pilih paket data")
                 .setItems(items, (d, which) -> {
                     String tier = which == 0 ? Manifest.TIER_EXTREME
@@ -247,7 +334,7 @@ public class MainActivity extends Activity {
 
     private void confirmDownload(String tier) {
         if (preset != null && !preset.viable) {
-            new AlertDialog.Builder(this)
+            new UiDialog.Alert(this)
                     .setTitle("Perangkat di bawah batas")
                     .setMessage(DeviceProfile.verdict(spec, preset)
                             + "\n\nTetap unduh paket data?")
@@ -268,15 +355,18 @@ public class MainActivity extends Activity {
         long need = manifest == null ? 0 : manifest.totalSize(Manifest.tagsFor(tier));
         String warn = StorageTarget.checkSpace(dir, need);
         if (warn != null) {
-            new AlertDialog.Builder(this)
+            new UiDialog.Alert(this)
                     .setTitle("Ruang tidak cukup")
                     .setMessage(warn)
                     .setPositiveButton("Tutup", null)
                     .show();
             return;
         }
+        progressHidden = false;
         InstallService.start(this, tier);
-        toast("Download dimulai — lihat notifikasi");
+        ProgressBus.running(this, -1, "Menghubungi server…");
+        ui.removeCallbacks(progressPoll);
+        ui.post(progressPoll);
     }
 
     // -------------------------------------------------------------- imports ----
@@ -319,7 +409,7 @@ public class MainActivity extends Activity {
     }
 
     private void importPackFromZip(Uri uri) {
-        ProgressDialog pd = spinner("Mengimpor paket…");
+        Spinner pd = spinner("Mengimpor paket…");
         new Thread(() -> {
             try {
                 File zip = copyToCache(uri, "pack.zip");
@@ -340,7 +430,7 @@ public class MainActivity extends Activity {
     }
 
     private void importModFromZip(Uri uri) {
-        ProgressDialog pd = spinner("Memasang mod…");
+        Spinner pd = spinner("Memasang mod…");
         new Thread(() -> {
             try {
                 File zip = copyToCache(uri, "mod.zip");
@@ -356,7 +446,7 @@ public class MainActivity extends Activity {
                     pd.dismiss();
                     StringBuilder sb = new StringBuilder();
                     for (ModInstaller.Installed i : done) sb.append("• ").append(i.target).append('\n');
-                    new AlertDialog.Builder(MainActivity.this)
+                    new UiDialog.Alert(MainActivity.this)
                             .setTitle(done.size() + " file terpasang")
                             .setMessage(sb.length() > 0 ? sb.toString() : "Tidak ada file dikenali.")
                             .setPositiveButton("OK", null)
@@ -404,7 +494,7 @@ public class MainActivity extends Activity {
             ExportUtil.saveToDownloads(this, "setup-args.txt", args, "text/plain");
             ExportUtil.saveToDownloads(this, "BACA-INI.txt", readme, "text/plain");
 
-            new AlertDialog.Builder(this)
+            new UiDialog.Alert(this)
                     .setTitle("Preset diekspor")
                     .setMessage("Disimpan di:\n" + a + "\n\n" + readme)
                     .setPositiveButton("OK", null)
@@ -421,7 +511,7 @@ public class MainActivity extends Activity {
         int checked = cur == StorageTarget.Mode.INTERNAL ? 0
                 : cur == StorageTarget.Mode.PUBLIC ? 1 : 2;
 
-        new AlertDialog.Builder(this)
+        new UiDialog.Alert(this)
                 .setTitle("Lokasi folder game")
                 .setSingleChoiceItems(arr, checked, (d, which) -> {
                     StorageTarget.Mode mode = which == 0 ? StorageTarget.Mode.INTERNAL
@@ -453,7 +543,7 @@ public class MainActivity extends Activity {
             refreshStorage();
             return;
         }
-        new AlertDialog.Builder(this)
+        new UiDialog.Alert(this)
                 .setTitle("Butuh izin akses file")
                 .setMessage("Untuk menulis ke storage publik/SD card, aktifkan "
                         + "\"Akses semua file\" untuk app ini.\n\nSetelah aktif, pilih lokasi lagi.")
@@ -475,7 +565,7 @@ public class MainActivity extends Activity {
     private void showGameFolder() {
         String path = GameDir.describe(this);
         long size = GameDir.size(GameDir.get(this));
-        new AlertDialog.Builder(this)
+        new UiDialog.Alert(this)
                 .setTitle("Folder game")
                 .setMessage(path + "\n\nUkuran: " + Manifest.humanSize(size))
                 .setPositiveButton("Tutup", null)
@@ -484,7 +574,28 @@ public class MainActivity extends Activity {
 
     // --------------------------------------------------------------- launch ----
 
+    /** Engine Winlator hanya ada untuk arm64-v8a (Box64 = ARM64). */
+    private static boolean isArm64() {
+        for (String abi : android.os.Build.SUPPORTED_ABIS) {
+            if ("arm64-v8a".equals(abi)) return true;
+        }
+        return false;
+    }
+
     private void launchGame() {
+        if (!isArm64()) {
+            new UiDialog.Alert(this)
+                    .title("Perangkat ini bukan ARM64")
+                    .message("Engine di APK ini hanya untuk arm64-v8a (HP ARM).\n\n"
+                            + "ABI terdeteksi: " + android.text.TextUtils.join(", ", android.os.Build.SUPPORTED_ABIS)
+                            + "\n\nEmulator x86 (MEmu/BlueStacks/LDPlayer) tidak bisa menjalankan "
+                            + "Wine+Box64. Pakai HP ARM64 sungguhan, atau pakai APK frontend "
+                            + "saja untuk lihat UI-nya.")
+                    .positive("Mengerti", null)
+                    .show();
+            return;
+        }
+
         // ---- APK gabungan: engine ada di dalam app ini sendiri ----------
         if (EngineBridge.enginePresent()) {
             if (preset == null) { toast("Scan perangkat belum selesai"); return; }
@@ -492,7 +603,7 @@ public class MainActivity extends Activity {
                     AppConfig.appLabel(), preset, GameDir.describe(this));
             String err = EngineBridge.play(this, GameDir.get(this), cp);
             if (err != null) {
-                new AlertDialog.Builder(this)
+                new UiDialog.Alert(this)
                         .setTitle("Tidak bisa jalan")
                         .setMessage(err)
                         .setPositiveButton("OK", null)
@@ -518,7 +629,7 @@ public class MainActivity extends Activity {
             toast("samp.exe belum ada — unduh paket data dulu");
             return;
         }
-        new AlertDialog.Builder(this)
+        new UiDialog.Alert(this)
                 .setTitle("Engine belum terpasang")
                 .setMessage("Folder game sudah siap di:\n" + GameDir.describe(this)
                         + "\n\nBuka lewat Winlator (atau build APK gabungan, lihat README), "
@@ -529,8 +640,8 @@ public class MainActivity extends Activity {
 
     // -------------------------------------------------------------- helpers ----
 
-    private ProgressDialog spinner(String msg) {
-        ProgressDialog pd = new ProgressDialog(this);
+    private Spinner spinner(String msg) {
+        Spinner pd = new Spinner(this, msg);
         pd.setMessage(msg);
         pd.setCancelable(false);
         pd.show();

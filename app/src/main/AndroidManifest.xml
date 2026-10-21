@@ -34,9 +34,11 @@
             android:screenOrientation="landscape"
             android:configChanges="keyboardHidden|orientation|screenSize" />
 
+        <!-- Proses terpisah: kalau ekstraksi native (unrar) crash, UI tidak ikut mati -->
         <service
             android:name=".InstallService"
             android:exported="false"
+            android:process=":sync"
             android:foregroundServiceType="dataSync" />
 
     </application>

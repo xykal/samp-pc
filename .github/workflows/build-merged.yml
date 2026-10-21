@@ -212,6 +212,7 @@ jobs:
 
               <service android:name="com.sampwrap.app.InstallService"
                         android:exported="false"
+                        android:process=":sync"
                         android:foregroundServiceType="dataSync" />
           '''
           s = s.replace('</application>', block + '\n    </application>')
