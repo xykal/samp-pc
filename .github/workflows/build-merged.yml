@@ -106,7 +106,57 @@ jobs:
 
           # ===== SAMP PC: ekstraktor RAR (UnRAR RARLAB) =====
           set(SAMPUNRAR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/sampunrar)
-          file(GLOB SAMPUNRAR_SRC ${SAMPUNRAR_DIR}/unrar/*.cpp)
+          # Daftar resmi dari makefile unrar (banyak .cpp lain di-include oleh
+          # file-file ini, mis. unpack.cpp memuat unpack50.cpp dst).
+          set(SAMPUNRAR_SRC
+          ${SAMPUNRAR_DIR}/unrar/rar.cpp
+          ${SAMPUNRAR_DIR}/unrar/strlist.cpp
+          ${SAMPUNRAR_DIR}/unrar/strfn.cpp
+          ${SAMPUNRAR_DIR}/unrar/pathfn.cpp
+          ${SAMPUNRAR_DIR}/unrar/smallfn.cpp
+          ${SAMPUNRAR_DIR}/unrar/global.cpp
+          ${SAMPUNRAR_DIR}/unrar/file.cpp
+          ${SAMPUNRAR_DIR}/unrar/filefn.cpp
+          ${SAMPUNRAR_DIR}/unrar/filcreat.cpp
+          ${SAMPUNRAR_DIR}/unrar/archive.cpp
+          ${SAMPUNRAR_DIR}/unrar/arcread.cpp
+          ${SAMPUNRAR_DIR}/unrar/unicode.cpp
+          ${SAMPUNRAR_DIR}/unrar/system.cpp
+          ${SAMPUNRAR_DIR}/unrar/crypt.cpp
+          ${SAMPUNRAR_DIR}/unrar/crc.cpp
+          ${SAMPUNRAR_DIR}/unrar/rawread.cpp
+          ${SAMPUNRAR_DIR}/unrar/encname.cpp
+          ${SAMPUNRAR_DIR}/unrar/resource.cpp
+          ${SAMPUNRAR_DIR}/unrar/match.cpp
+          ${SAMPUNRAR_DIR}/unrar/timefn.cpp
+          ${SAMPUNRAR_DIR}/unrar/rdwrfn.cpp
+          ${SAMPUNRAR_DIR}/unrar/consio.cpp
+          ${SAMPUNRAR_DIR}/unrar/options.cpp
+          ${SAMPUNRAR_DIR}/unrar/errhnd.cpp
+          ${SAMPUNRAR_DIR}/unrar/rarvm.cpp
+          ${SAMPUNRAR_DIR}/unrar/secpassword.cpp
+          ${SAMPUNRAR_DIR}/unrar/rijndael.cpp
+          ${SAMPUNRAR_DIR}/unrar/getbits.cpp
+          ${SAMPUNRAR_DIR}/unrar/sha1.cpp
+          ${SAMPUNRAR_DIR}/unrar/sha256.cpp
+          ${SAMPUNRAR_DIR}/unrar/blake2s.cpp
+          ${SAMPUNRAR_DIR}/unrar/hash.cpp
+          ${SAMPUNRAR_DIR}/unrar/extinfo.cpp
+          ${SAMPUNRAR_DIR}/unrar/extract.cpp
+          ${SAMPUNRAR_DIR}/unrar/volume.cpp
+          ${SAMPUNRAR_DIR}/unrar/list.cpp
+          ${SAMPUNRAR_DIR}/unrar/find.cpp
+          ${SAMPUNRAR_DIR}/unrar/unpack.cpp
+          ${SAMPUNRAR_DIR}/unrar/headers.cpp
+          ${SAMPUNRAR_DIR}/unrar/threadpool.cpp
+          ${SAMPUNRAR_DIR}/unrar/rs16.cpp
+          ${SAMPUNRAR_DIR}/unrar/cmddata.cpp
+          ${SAMPUNRAR_DIR}/unrar/ui.cpp
+          ${SAMPUNRAR_DIR}/unrar/largepage.cpp
+          ${SAMPUNRAR_DIR}/unrar/filestr.cpp
+          ${SAMPUNRAR_DIR}/unrar/scantree.cpp
+          ${SAMPUNRAR_DIR}/unrar/dll.cpp
+          ${SAMPUNRAR_DIR}/unrar/qopen.cpp)
           add_library(sampunrar SHARED
                   ${SAMPUNRAR_DIR}/sampunrar_jni.cpp
                   ${SAMPUNRAR_SRC})
