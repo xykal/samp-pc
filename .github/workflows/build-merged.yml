@@ -153,11 +153,21 @@ jobs:
           echo "EXIT CODE GRADLE: $RC"
           echo "=========== 60 BARIS TERAKHIR ==========="
           tail -60 /tmp/gradle-build.log
-          echo "=========== KONTEKS ERROR ==========="
-          grep -n -E "What went wrong|error:|error;|e: file|Caused by|FAILED|Execution failed|^> Task .*FAILED" \
-            -A 14 /tmp/gradle-build.log | head -160
+          echo "=========== BLOK 'WHAT WENT WRONG' ==========="
+          awk '/What went wrong/{f=1} f{print} /\* Try:/{if(f)exit}' /tmp/gradle-build.log | head -200
+          echo "=========== BARIS CMake/COMPILE ERROR ==========="
+          grep -n -E "CMake Error|CMake Warning|error:|error;|e: file|^e: |No such file|fatal error|FAILED" \
+            /tmp/gradle-build.log | head -60
           echo "====================================="
           exit $RC
+
+      - name: Upload log gradle (kalau gagal)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: /tmp/gradle-build.log
+          if-no-files-found: ignore
 
       - name: Info APK
         if: always()
