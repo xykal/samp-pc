@@ -247,3 +247,45 @@ kegagalan user murni di sisi **Drive (403)**.
 
 **Rilis:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.8.0>  
 `500.815.867 B` · sha256 `6222961776d0c26e3f857a28357dd5e54477e1a26c1e4a16f19d60c5fad6a911`
+
+
+## 13. v1.8.1 — audit APK: 3 URL rusak karena rebranding
+
+Audit isi APK v1.8.0 (bukan asumsi) menemukan penggantian kata "Winlator" ikut
+menyentuh **URL**:
+
+| Sebelum | Sesudah (rusak) |
+|---|---|
+| `raw.githubusercontent.com/StevenMXZ/Winlator-Contents/main/contents.json` | `.../XversSamp-Contents/...` |
+| `github.com/StevenMXZ/Winlator-Contents/releases/download/1.0/Proton.9.0-x86_64.wcp` | `.../XversSamp-Contents/...` |
+| `.../proton-10-arm64ec.wcp.xz` | idem |
+
+Efek: fitur unduh konten tambahan (Wine/DXVK versi lain) 404.
+Perbaikan: string literal yang mengandung `http://`, `https://`, `github.com`,
+`githubusercontent` tidak lagi disentuh. Audit APK v1.8.1: **URL rusak = 0**.
+
+Catatan: `package com.winlator.cmod` **tidak boleh** diganti — JNI & refleksi
+memanggil class lewat package itu. Yang bisa diganti hanya teks yang tampil.
+
+## 14. Analisis "engine sendiri"
+
+Lihat `docs/ENGINE-SENDIRI.md`. Ringkas, dengan angka ukur APK v1.8.0:
+
+| Komponen | Ukuran |
+|---|---|
+| `imagefs.tar.zst` (rootfs Linux + X server + PulseAudio) | 184,5 MB |
+| `proton-9.0-arm64ec.tar.zst` ← **ini Wine-nya** | 70,2 MB |
+| pattern proton (arm64ec + x86_64) | 18,1 MB |
+| `container_pattern_common.tzst` | 38,6 MB |
+| `dxwrapper/*` 5 varian DXVK | 31,3 MB |
+| `graphics_driver/*` 5 varian | 38,3 MB |
+| `wincomponents/direct3d.tzst` | 29,8 MB |
+| `box64-0.4.2.tzst` | 3,8 MB |
+| `lib/arm64-v8a/*.so` | 10,9 MB |
+
+Tiga opsi: **(A) engine ramping buatan kita** (±425–450 MB, 1–2 hari, risiko sedang),
+**(B) ganti Wine dengan build sendiri** (mingguan–bulanan, butuh perangkat ARM64 untuk uji),
+**(C) dari nol** (tidak realistis; dan tidak menyelesaikan MEmu x86).
+
+**Rilis v1.8.1:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.8.1>  
+`500.815.863 B` · sha256 `d483d5125604558ef6ed7a7f02d1c54f9a644a440d24e8709a852f0ef04fba18`
