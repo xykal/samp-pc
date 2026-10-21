@@ -48,6 +48,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        AppConfig.load(this);
         setContentView(buildUi());
         askNotificationPermission();
         scanDevice();
@@ -65,7 +66,7 @@ public class MainActivity extends Activity {
         int p = UiKit.dp(this, 18);
         root.setPadding(p, p, p, p);
 
-        TextView title = UiKit.text(this, BuildConfig.APP_LABEL, 28, true, UiKit.ACCENT);
+        TextView title = UiKit.text(this, AppConfig.appLabel(), 28, true, UiKit.ACCENT);
         TextView sub = UiKit.text(this,
                 "SA-MP versi PC (x86) lewat Wine + Box64", 13, false, UiKit.MUTED);
         root.addView(title);
@@ -259,7 +260,7 @@ public class MainActivity extends Activity {
     }
 
     private void startDownload(String tier) {
-        if (BuildConfig.PACK_BASE_URL.isEmpty() && BuildConfig.PACK_ARCHIVE_URL.isEmpty()) {
+        if (AppConfig.packBaseUrl().isEmpty() && AppConfig.packArchiveUrl().isEmpty()) {
             toast("Isi PACK_BASE_URL atau PACK_ARCHIVE_URL di gradle.properties");
             return;
         }
@@ -381,7 +382,7 @@ public class MainActivity extends Activity {
     private void exportPreset() {
         if (preset == null) { toast("Scan perangkat belum selesai"); return; }
         try {
-            ContainerPreset cp = ContainerPreset.forDevice(BuildConfig.APP_LABEL, preset,
+            ContainerPreset cp = ContainerPreset.forDevice(AppConfig.appLabel(), preset,
                     GameDir.describe(this));
 
             String json = cp.toContainerJson(1);

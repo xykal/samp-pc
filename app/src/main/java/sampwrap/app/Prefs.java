@@ -34,7 +34,7 @@ public final class Prefs {
     }
 
     public static String server(Context c) {
-        return sp(c).getString(K_SERVER, BuildConfig.DEFAULT_SERVER);
+        return sp(c).getString(K_SERVER, AppConfig.defaultServer());
     }
 
     public static void setServer(Context c, String v) {

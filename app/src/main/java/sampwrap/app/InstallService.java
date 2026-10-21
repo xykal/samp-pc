@@ -42,6 +42,7 @@ public class InstallService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        AppConfig.load(this);
         String tier = intent == null ? Prefs.pack(this) : intent.getStringExtra(EXTRA_TIER);
         if (tier == null) tier = "lite";
 
@@ -61,7 +62,7 @@ public class InstallService extends Service {
             EnumSet<Manifest.Tag> tags = Manifest.tagsFor(tier);
 
             // Mode A: satu arsip ZIP (lebih simpel untuk hosting)
-            if (!BuildConfig.PACK_ARCHIVE_URL.isEmpty()) {
+            if (!AppConfig.packArchiveUrl().isEmpty()) {
                 downloadArchiveAndExtract(m, tags, tier);
                 return;
             }
@@ -109,7 +110,7 @@ public class InstallService extends Service {
         postProgress("Mengunduh arsip…", 0, 0, true);
 
         java.net.HttpURLConnection c = (java.net.HttpURLConnection)
-                new java.net.URL(BuildConfig.PACK_ARCHIVE_URL).openConnection();
+                new java.net.URL(AppConfig.packArchiveUrl()).openConnection();
         c.setConnectTimeout(20000);
         c.setReadTimeout(30000);
         long len = c.getContentLengthLong();

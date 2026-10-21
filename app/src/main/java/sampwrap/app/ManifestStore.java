@@ -14,8 +14,8 @@ import java.io.InputStream;
  *   1. dari cache lokal (hasil unduh manifest terbaru), kalau ada
  *   2. kalau tidak, dari assets/manifest_default.tsv
  *
- * Kalau BuildConfig.PACK_BASE_URL diisi, manifest diunduh dari
- * <base>/manifest.tsv saat app dibuka (lihat MainActivity.refreshManifest).
+ * Kalau pack.baseUrl diisi di assets/app_config.properties, manifest bisa
+ * diunduh dari <base>/manifest.tsv (lihat manifestUrl()).
  */
 public final class ManifestStore {
 
@@ -50,8 +50,6 @@ public final class ManifestStore {
     }
 
     public static String manifestUrl() {
-        String base = BuildConfig.PACK_BASE_URL;
-        if (base == null || base.isEmpty()) return "";
-        return base.endsWith("/") ? base + "manifest.tsv" : base + "/manifest.tsv";
+        return com.sampwrap.app.AppConfig.manifestUrl();
     }
 }
