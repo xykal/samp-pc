@@ -88,20 +88,25 @@ jobs:
           d = zstd.ZstdDecompressor()
           os.makedirs('/opt/imagefs', exist_ok=True)
           keep = ('usr/lib/', 'usr/include/')
-          n = 0
+          n = nlink = 0
           with d.stream_reader(io.BytesIO(raw)) as r:
               tf = tarfile.open(fileobj=r, mode='r|')
               for m in tf:
-                  if not m.name.startswith(keep) or not m.isfile():
+                  if not m.name.startswith(keep):
+                      continue
+                  # Symlink WAJIB ikut: imagefs hanya punya file asli
+                  # (libX11.so.6.4.0), sedangkan linker mencari -lX11 -> libX11.so
+                  if not (m.isfile() or m.issym()):
                       continue
                   try:
                       tf.extract(m, '/opt/imagefs')
-                      n += 1
+                      if m.isfile():
+                          n += 1
+                      else:
+                          nlink += 1
                   except Exception:
                       pass
-                  if n > 3000:
-                      break
-          print('extracted', n)
+          print('extracted', n, 'files,', nlink, 'symlinks')
           PY
           ls /opt/imagefs/usr/lib | head -5
           ls /opt/imagefs/usr/include 2>/dev/null | head -3 || echo "(tanpa header)"
