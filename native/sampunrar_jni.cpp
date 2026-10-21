@@ -19,9 +19,9 @@
 
 #include "dll.hpp"
 
-#ifdef SAMPUNRAR_HOST_TEST
 typedef void (*ProgressFn)(void *ctx, const char *name, long long done);
-#else
+
+#ifndef SAMPUNRAR_HOST_TEST
 #include <jni.h>
 #include <android/log.h>
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "sampunrar", __VA_ARGS__)
