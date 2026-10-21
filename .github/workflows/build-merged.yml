@@ -331,27 +331,30 @@ jobs:
           PY
           grep -n "minifyEnabled\|shrinkResources\|splits {" winlator/app/build.gradle | head
 
-      # Fork punya salinan res/drawable AppCompat (abc_btn_check_material_anim.xml
-      # dll) yang menunjuk @id/checked|unchecked|on|off, tapi res/values/ids.xml
-      # tidak ada -> AAPT gagal di build release ("resource id/checked not found").
-      - name: Tambah res/values/ids.xml yang hilang
+      # Fork menyalin banyak res AppCompat (drawable/layout) yang menunjuk
+      # @id/checked, @id/spinner, @id/seekbar, dst — tapi res/values/ids.xml
+      # tidak ada, jadi AAPT gagal saat build release. Daripada tambal satu-satu,
+      # kumpulkan SEMUA @id/ yang dipakai tapi belum dideklarasikan.
+      - name: Lengkapi res/values/ids.xml (auto-deteksi id yang hilang)
         run: |
-          F=winlator/app/src/main/res/values/ids.xml
-          if [ ! -f "$F" ]; then
-          cat > "$F" <<'XML'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <item name="checked" type="id"/>
-              <item name="unchecked" type="id"/>
-              <item name="on" type="id"/>
-              <item name="off" type="id"/>
-              <item name="checkedButton" type="id"/>
-              <item name="snackbar_action" type="id"/>
-              <item name="snackbar_text" type="id"/>
-          </resources>
-          XML
-          fi
-          cat "$F"
+          python3 - <<'PY'
+          import re, pathlib
+          root = pathlib.Path('winlator/app/src/main/res')
+          used, declared = set(), set()
+          for f in root.rglob('*.xml'):
+              t = f.read_text(errors='ignore')
+              used |= set(re.findall(r'(?<!\+)@id/([A-Za-z0-9_]+)', t))
+              declared |= set(re.findall(r'@\+id/([A-Za-z0-9_]+)', t))
+          missing = sorted(used - declared)
+          out = root / 'values' / 'ids.xml'
+          body = '\n'.join('    <item name="%s" type="id"/>' % m for m in missing)
+          out.write_text('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
+                         + body + '\n</resources>\n')
+          print('id dipakai:', len(used), '| dideklarasikan:', len(declared),
+                '| ditambahkan:', len(missing))
+          print(missing)
+          PY
+          cat winlator/app/src/main/res/values/ids.xml
 
       - name: Build APK gabungan
         working-directory: winlator
