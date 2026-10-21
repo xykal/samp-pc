@@ -119,8 +119,11 @@ jobs:
                   s = f.read_text(errors='ignore')
                   def fix(m):
                       lit = m.group(1)
-                      # jangan sentuh nama class/package di dalam string
-                      if 'com.winlator' in lit or 'Lcom/' in lit or '$' in lit:
+                      # jangan sentuh nama class/package/URL di dalam string:
+                      # URL ikut berubah = 404 (ketahuan di audit APK v1.8.0)
+                      if ('com.winlator' in lit or 'Lcom/' in lit or '$' in lit
+                              or 'http://' in lit or 'https://' in lit
+                              or 'github.com' in lit or 'githubusercontent' in lit):
                           return m.group(0)
                       return '"' + lit.replace('Winlator', 'XversSamp') + '"'
                   t = re.sub(r'"([^"\n]*)"', fix, s)
