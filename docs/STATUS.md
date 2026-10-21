@@ -214,3 +214,36 @@ setelah unduh.
 
 **Rilis:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.7.0>  
 `500.813.447 B` · sha256 `d578bc14c0929ab7264072d76338d917f009d31311e1715194b34c4fdf1ddc6c`
+
+
+## 12. v1.8.0 — Drive 403, impor RAR, dan pengujian end-to-end
+
+Keluhan: *"gagal bre intinya kayak Drive gagal 403 ... kalo bisa lu langsung tes sendiri sebelum
+ngasih gua validasi"*.
+
+### Pengujian mandiri (sandbox, kode yang sama dengan APK)
+
+| Uji | Hasil |
+|---|---|
+| `DriveDownloader.open()` penuh | HTTP 200, `application/octet-stream`, **712.800.749 B dalam 6 dtk** |
+| resume `open(url, 64 MB)` | **HTTP 206**, `Content-Range: bytes 67108864-712800748/712800749` |
+| unrar (48 unit source = list CMake JNI) pass 1 | RAR luar → `TUTOR GTA SAMP PC/GTA SAN ANDREAS FIXED.rar` (612.599.927 B) |
+| isi arsip dalam | 448 entri, root `GTA SAN ANDREAS FIXED/`, ada `gta_sa.exe`, **tidak ada** `samp.exe` |
+| manifest vs arsip | 412/412 path manifest ada (5 sisanya `samp-install/*` yang memang dilewati) |
+| ekstrak LITE | **2.4 GB** (`unrar x @filter_lite.txt`) |
+| tempel `samp-client.zip` | **`samp.exe` + `gta_sa.exe` ADA**, `models/gta3.img`, `audio/streams/AA` ada |
+
+Kesimpulan: pipeline data (unduh → RAR berlapis → tier → client) **terbukti benar**;
+kegagalan user murni di sisi **Drive (403)**.
+
+### Perubahan
+- `DriveDownloader`: `CookieManager(ACCEPT_ALL)`, 3 endpoint berurutan
+  (`drive.usercontent.google.com` → `drive.google.com/uc` → `docs.google.com/uc`),
+  pesan khusus 403 (kuota) / 404 / 429, ringkasan HTML Google di pesan error.
+- Arsip **tidak dihapus** sebelum pemasangan sukses → retry memakai `Range` (resume).
+- `InstallService.startLocal()` + `ACTION_LOCAL`: impor **ZIP maupun RAR** lewat
+  pipeline yang sama (progress, verifikasi `samp.exe`, log).
+- Dialog gagal: **Diagnostik / Impor file / Coba lagi**.
+
+**Rilis:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.8.0>  
+`500.815.867 B` · sha256 `6222961776d0c26e3f857a28357dd5e54477e1a26c1e4a16f19d60c5fad6a911`

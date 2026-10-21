@@ -5,7 +5,8 @@ frontend yang menyembunyikan emulator.
 
 ## ⬇️ APK siap pakai
 
-**APK gabungan v1.7.0 (XversSamp):** <https://github.com/xykal/samp-pc-download/releases/download/v1.7.0/xverssamp-v1.7.0-merged.apk>
+**APK gabungan v1.8.0 (XversSamp):** <https://github.com/xykal/samp-pc-download/releases/download/v1.8.0/xverssamp-v1.8.0-merged.apk>
+v1.7.0: <https://github.com/xykal/samp-pc-download/releases/download/v1.7.0/xverssamp-v1.7.0-merged.apk>
 v1.6.0: <https://github.com/xykal/samp-pc-download/releases/download/v1.6.0/xverssamp-v1.6.0-merged.apk>
 v1.5.0: <https://github.com/xykal/samp-pc-download/releases/download/v1.5.0/xverssamp-v1.5.0-merged.apk>
 v1.4.0: <https://github.com/xykal/samp-pc-download/releases/download/v1.4.0/samp-pc-v1.4.0-merged.apk>  
