@@ -198,14 +198,14 @@ public class InstallService extends Service {
         String space = StorageTarget.checkSpace(game, m.totalSize(tags) + 800L * 1024 * 1024);
         if (space != null) throw new Exception(space.replace('\n', ' '));
 
-        postProgress("Mengunduh paket…", 0, 0, true);
+        postProgress("Mengunduh paket…", -1, 0, false);
         downloadFile(packUrl, arc, "paket",
                 m.totalSize(tags) + 300L * 1024 * 1024);
 
         if (isRar(arc)) {
             installRar(arc, m, tags, tmp, game);
         } else {
-            postProgress("Mengekstrak ZIP…", 0, 0, true);
+            postProgress("Mengekstrak ZIP…", -1, 0, false);
             com.sampwrap.core.PackInstaller pi =
                     new com.sampwrap.core.PackInstaller(m, tags, null);
             pi.install(arc, game, false);
@@ -215,42 +215,78 @@ public class InstallService extends Service {
         installClient(tmp, game);
 
         Prefs.setPack(this, tier);
-        postProgress("Selesai — game siap dijalankan", 0, 0, true);
+        long size = GameDir.size(game);
+        InstallLog.w(this, "selesai, ukuran folder=" + size + " B");
+        InstallLog.w(this, "isi folder: " + topLevel(game));
+
+        // pagar terakhir: kalau hasil ekstrak tidak sesuai harapan, jangan
+        // bilang "selesai" — user jadi bingung kenapa samp.exe tidak ada
+        if (!new File(game, "samp.exe").isFile()) {
+            throw new Exception("Selesai mengekstrak (" + (size >> 20) + " MB) tapi samp.exe "
+                    + "tidak ada. Isi folder: " + topLevel(game));
+        }
+        postProgress("Selesai — game siap dijalankan", 100, 100, true);
     }
 
     /** RAR bersarang: buka RAR dalam, lalu ekstrak file sesuai tier. */
     private void installRar(File outer, Manifest m, EnumSet<Manifest.Tag> tags,
                             File tmp, File game) throws Exception {
-        if (!RarNative.available()) {
-            throw new Exception("Extractor RAR tidak tersedia di APK ini "
-                    + "(pakai APK gabungan / versi terbaru).");
+        boolean rarOk = RarNative.available();
+        InstallLog.w(this, "RarNative tersedia=" + rarOk);
+        if (!rarOk) {
+            throw new Exception("Extractor RAR tidak bisa dipakai di perangkat ini "
+                    + "(libsampunrar gagal dimuat). Di emulator x86, jalankan di HP ARM64.");
         }
 
-        postProgress("Membuka RAR dalam…", 0, 0, true);
+        postProgress("Membuka RAR dalam…", -1, 0, false);
+        InstallLog.w(this, "pass 1: cari *.rar di " + outer.getName());
         long[] r1 = RarNative.extract(outer.getAbsolutePath(), tmp.getAbsolutePath(),
                 new String[]{"*.rar"}, null);
+        InstallLog.w(this, "pass 1 hasil=" + (r1 == null ? "null" : (r1[0] + " file, " + r1[1] + " B")));
         if (r1 == null || r1[0] <= 0) throw new Exception("Tidak menemukan RAR di dalam paket");
 
         File inner = biggestRar(tmp);
         if (inner == null) throw new Exception("RAR dalam tidak terbaca");
+        InstallLog.w(this, "rar dalam: " + inner.getName() + " (" + (inner.length() >> 20) + " MB)");
         outer.delete();   // hemat ruang sebelum ekstrak 1,5 GB
 
         final int[] last = {0};
         String[] wanted = wantedPaths(m, tags);
         postProgress("Mengekstrak " + wanted.length + " file…", 0, wanted.length, false);
+        InstallLog.w(this, "pass 2: " + wanted.length + " file -> " + game.getAbsolutePath());
         long[] r2 = RarNative.extract(inner.getAbsolutePath(), game.getAbsolutePath(), wanted,
                 new RarNative.Progress() {
+                    private long lastLog;
                     @Override public void onData(String name, long done, long total) {
                         postProgress("Mengekstrak… " + (done >> 20) + " MB",
                                 (int) (done >> 20), (int) (total >> 20), false);
+                        if (done - lastLog > 200L * 1024 * 1024) {
+                            lastLog = done;
+                            InstallLog.w(InstallService.this, "ekstrak " + (done >> 20) + " MB / "
+                                    + (total >> 20) + " MB  (" + name + ")");
+                        }
                     }
                 });
+        InstallLog.w(this, "pass 2 hasil=" + (r2 == null ? "null" : (r2[0] + " file, " + r2[1] + " B")));
         inner.delete();
-        if (r2 == null) throw new Exception("Ekstraksi gagal");
+        if (r2 == null) throw new Exception("Ekstraksi gagal (lib unrar mengembalikan null)");
         if (r2[0] < wanted.length) {
             postProgress("Selesai " + r2[0] + "/" + wanted.length
-                    + " file (sisanya tidak ada di paket)", 0, 0, true);
+                    + " file (sisanya tidak ada di paket)", -1, 0, false);
         }
+    }
+
+    private static String topLevel(File dir) {
+        File[] fs = dir.listFiles();
+        if (fs == null || fs.length == 0) return "(kosong)";
+        StringBuilder sb = new StringBuilder();
+        int n = 0;
+        for (File f : fs) {
+            if (n++ > 0) sb.append(", ");
+            sb.append(f.getName()).append(f.isDirectory() ? "/" : "");
+            if (n >= 14) { sb.append(", …"); break; }
+        }
+        return sb.toString();
     }
 
     /** Daftar path sesuai tier, tanpa file installer (samp-install/). */
@@ -268,10 +304,11 @@ public class InstallService extends Service {
     private void installClient(File tmp, File game) throws Exception {
         String url = AppConfig.packClientUrl();
         if (url.isEmpty()) return;
-        postProgress("Mengunduh client SA-MP…", 0, 0, true);
+        postProgress("Mengunduh client SA-MP…", -1, 0, false);
         File zip = new File(tmp, "client.zip");
         downloadFile(url, zip, "client SA-MP", 0);
-        postProgress("Memasang SA-MP…", 0, 0, true);
+        postProgress("Memasang SA-MP…", -1, 0, false);
+        InstallLog.w(this, "unzip client -> " + game.getAbsolutePath());
         unzipTo(zip, game);
         zip.delete();
     }

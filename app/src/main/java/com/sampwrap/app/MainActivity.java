@@ -43,49 +43,53 @@ public class MainActivity extends Activity {
     private DeviceProfile.Preset preset;
     private Manifest manifest;
 
-    private UiDialog.Progress liveProgress;
-    private volatile boolean progressHidden;
+    // progress inline di layar utama (tidak bisa hilang / ketutup dialog)
+    private LinearLayout progressCard;
+    private TextView progressStatus, progressPct;
+    private UiDialog.Bar progressBar;
+
     private String lastTier = "lite";
+    private int alertState = ProgressBus.IDLE;   // biar tidak dobel dialog
     private final Runnable progressPoll = new Runnable() {
         @Override public void run() {
             ProgressBus pb = ProgressBus.read(MainActivity.this);
-            if (pb.state == ProgressBus.RUNNING
-                    && System.currentTimeMillis() - pb.updatedAt > 25000) {
-                // proses ":sync" mati mendadak (crash native) -> jangan menggantung
-                hideProgress();
-                ProgressBus.failed(MainActivity.this,
-                        "Proses berhenti mendadak saat: " + pb.text);
-                ui.post(this);
+
+            if (pb.state == ProgressBus.RUNNING) {
+                long age = System.currentTimeMillis() - pb.updatedAt;
+                if (age > 45000) {
+                    // proses ":sync" mati mendadak (crash native / dibunuh sistem)
+                    InstallLog.w(MainActivity.this,
+                            "progress basi " + (age / 1000) + " dtk -> anggap gagal");
+                    ProgressBus.failed(MainActivity.this,
+                            "Proses berhenti mendadak saat: " + pb.text);
+                    ui.post(this);
+                    return;
+                }
+                showProgressCard(pb.text, pb.pct);
+                ui.postDelayed(this, 400);
                 return;
             }
-            if (pb.state == ProgressBus.RUNNING) {
-                if (!progressHidden) {
-                    if (liveProgress == null) {
-                        liveProgress = UiDialog.progress(MainActivity.this,
-                                "Mengunduh paket data", pb.text);
-                        liveProgress.onCancel(() -> progressHidden = true);
-                        liveProgress.show();
-                    }
-                    liveProgress.show();
-                    liveProgress.update(pb.text, pb.pct);
-                }
-                ui.postDelayed(this, 400);
-            } else if (pb.state == ProgressBus.DONE) {
-                hideProgress();
-                progressHidden = false;
+
+            hideProgressCard();
+
+            if (pb.state == ProgressBus.DONE && alertState != ProgressBus.DONE) {
+                alertState = ProgressBus.DONE;
                 ProgressBus.idle(MainActivity.this);
                 refreshStorage();
+                InstallLog.w(MainActivity.this, "UI: paket siap, ukuran="
+                        + GameDir.size(GameDir.get(MainActivity.this)));
                 new UiDialog.Alert(MainActivity.this)
                         .title("Paket siap")
-                        .message("Data sudah diekstrak.\n\nTekan \"Jalankan SA-MP\" untuk mulai.")
-                        .positive("Oke", null)
+                        .message("Data sudah diekstrak ke:\n" + GameDir.describe(MainActivity.this)
+                                + "\n\nTekan \"Jalankan SA-MP\" untuk mulai.")
+                        .neutral("Buka folder", () -> showGameFolder())
+                        .positive("Jalankan", () -> launchGame())
                         .show();
-            } else if (pb.state == ProgressBus.FAILED) {
-                hideProgress();
-                progressHidden = false;
+            } else if (pb.state == ProgressBus.FAILED && alertState != ProgressBus.FAILED) {
+                alertState = ProgressBus.FAILED;
                 ProgressBus.idle(MainActivity.this);
                 new UiDialog.Alert(MainActivity.this)
-                        .title("Gagal mengunduh")
+                        .title("Gagal memasang paket")
                         .message(pb.text)
                         .neutral("Diagnostik", () -> showDiagnostics())
                         .negative("Lihat log", () -> showInstallLog())
@@ -94,6 +98,25 @@ public class MainActivity extends Activity {
             }
         }
     };
+
+    private void showProgressCard(String text, int pct) {
+        if (progressCard == null) return;
+        if (progressCard.getVisibility() != View.VISIBLE) {
+            progressCard.setVisibility(View.VISIBLE);
+            if (progressCard.getParent() instanceof View) {
+                ((View) progressCard.getParent()).requestFocus();
+            }
+        }
+        progressStatus.setText(text == null ? "" : text);
+        progressBar.setProgress(pct);
+        progressPct.setText(pct >= 0 ? pct + "%" : "bekerja…");
+    }
+
+    private void hideProgressCard() {
+        if (progressCard != null && progressCard.getVisibility() != View.GONE) {
+            progressCard.setVisibility(View.GONE);
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -114,13 +137,6 @@ public class MainActivity extends Activity {
         if (manifest != null) refreshStorage();
         ui.removeCallbacks(progressPoll);
         ui.post(progressPoll);
-    }
-
-    private void hideProgress() {
-        if (liveProgress != null) {
-            liveProgress.dismiss();
-            liveProgress = null;
-        }
     }
 
     /** Tampilkan crash terakhir (kalau ada) supaya kelihatan penyebabnya. */
@@ -210,6 +226,9 @@ public class MainActivity extends Activity {
                 sb.append("MODE    : ").append(StorageTarget.currentMode(this)).append('\n');
                 sb.append("RUANG   : bebas ").append(free < 0 ? "?" : Manifest.humanSize(free)).append('\n');
                 sb.append("DATA    : ").append(Manifest.humanSize(GameDir.size(dir))).append('\n');
+                sb.append("RAR     : ").append(RarNative.available() ? "siap" : "TIDAK BISA DIMUAT").append('\n');
+                sb.append("samp.exe: ").append(new File(dir, "samp.exe").isFile() ? "ada" : "belum ada").append('\n');
+                sb.append("ISI     : ").append(topLevelNames(dir)).append('\n');
 
                 String url = Prefs.effectivePackUrl(this);
                 sb.append("SUMBER  : ").append(url.isEmpty() ? "(kosong!)" : url).append('\n');
@@ -247,6 +266,19 @@ public class MainActivity extends Activity {
         }, "diagnostics").start();
     }
 
+    private static String topLevelNames(File dir) {
+        File[] fs = dir.listFiles();
+        if (fs == null || fs.length == 0) return "(kosong)";
+        StringBuilder sb = new StringBuilder();
+        int n = 0;
+        for (File f : fs) {
+            if (n++ > 0) sb.append(", ");
+            sb.append(f.getName()).append(f.isDirectory() ? "/" : "");
+            if (n >= 12) { sb.append(", …"); break; }
+        }
+        return sb.toString();
+    }
+
     private void showCrashLog() {
         String log = CrashGuard.last(this);
         new UiDialog.Alert(this)
@@ -272,6 +304,42 @@ public class MainActivity extends Activity {
                 "SA-MP versi PC (x86) lewat Wine + Box64", 13, false, UiKit.MUTED);
         root.addView(title);
         root.addView(sub);
+
+        if (isX86Host()) {
+            root.addView(UiKit.gap(this, 12));
+            LinearLayout warn = UiKit.card(this);
+            TextView w1 = UiKit.text(this, "PERANGKAT x86 TERDETEKSI", 12, true, UiKit.DANGER);
+            warn.addView(w1);
+            warn.addView(UiKit.gap(this, 6));
+            warn.addView(UiKit.text(this,
+                    "Ini emulator x86 (MEmu/BlueStacks/LDPlayer). Engine di APK ini "
+                            + "butuh ARM64 asli, jadi GTA-nya kemungkinan besar tidak jalan. "
+                            + "Unduh & pasang paket tetap bisa untuk tes alur.",
+                    12, false, UiKit.TEXT));
+            root.addView(warn);
+        }
+
+        // --- kartu progress (selalu di atas, tidak bisa hilang) ---
+        root.addView(UiKit.gap(this, 14));
+        progressCard = UiKit.card(this);
+        progressCard.setVisibility(View.GONE);
+        progressCard.addView(UiKit.text(this, "SEDANG DIKERJAKAN", 12, true, UiKit.ACCENT));
+        progressCard.addView(UiKit.gap(this, 8));
+        progressStatus = UiKit.text(this, "Menyiapkan…", 14, false, UiKit.TEXT);
+        progressCard.addView(progressStatus);
+        progressCard.addView(UiKit.gap(this, 10));
+        progressBar = new UiDialog.Bar(this);
+        progressCard.addView(progressBar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(this, 10)));
+        progressPct = UiKit.text(this, "", 12, true, UiKit.MUTED);
+        progressPct.setPadding(0, UiKit.dp(this, 6), 0, 0);
+        progressCard.addView(progressPct);
+        progressCard.addView(UiKit.gap(this, 6));
+        progressCard.addView(UiKit.text(this,
+                "Boleh ditinggal — unduhan jalan di latar belakang. "
+                        + "Kalau koneksi putus, app lanjut sendiri.", 11, false, UiKit.MUTED));
+        root.addView(progressCard);
+
         root.addView(UiKit.gap(this, 16));
 
         // --- kartu perangkat ---
@@ -481,9 +549,10 @@ public class MainActivity extends Activity {
                     .show();
             return;
         }
-        progressHidden = false;
+        alertState = ProgressBus.IDLE;
         InstallService.start(this, tier);
         ProgressBus.running(this, -1, "Menghubungi server…");
+        showProgressCard("Menghubungi server…", -1);
         ui.removeCallbacks(progressPoll);
         ui.post(progressPoll);
     }
@@ -693,6 +762,12 @@ public class MainActivity extends Activity {
 
     // --------------------------------------------------------------- launch ----
 
+    /** Emulator x86? (ABI utama x86/x86_64) */
+    private static boolean isX86Host() {
+        String[] abis = android.os.Build.SUPPORTED_ABIS;
+        return abis.length > 0 && abis[0] != null && abis[0].startsWith("x86");
+    }
+
     /** Engine Winlator hanya ada untuk arm64-v8a (Box64 = ARM64). */
     private static boolean isArm64() {
         for (String abi : android.os.Build.SUPPORTED_ABIS) {
@@ -717,6 +792,19 @@ public class MainActivity extends Activity {
 
         // ---- APK gabungan: engine ada di dalam app ini sendiri ----------
         if (EngineBridge.enginePresent()) {
+            long installed = GameDir.size(GameDir.get(this));
+            if (installed < 200L * 1024 * 1024) {
+                new UiDialog.Alert(this)
+                        .title("Data game belum terpasang")
+                        .message("Folder game masih kosong (" + Manifest.humanSize(installed) + ").\n\n"
+                                + GameDir.describe(this)
+                                + "\n\nTekan \"Pilih & unduh paket\" dulu — sekali saja, "
+                                + "±712 MB, bisa ditinggal.")
+                        .neutral("Diagnostik", () -> showDiagnostics())
+                        .positive("Unduh sekarang", () -> showPackDialog())
+                        .show();
+                return;
+            }
             if (preset == null) { toast("Scan perangkat belum selesai"); return; }
             ContainerPreset cp = ContainerPreset.forDevice(
                     AppConfig.appLabel(), preset, GameDir.describe(this));

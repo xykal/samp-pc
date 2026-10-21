@@ -57,8 +57,9 @@ final class EngineBridge {
     static String play(Activity a, File gameDir, ContainerPreset preset) {
         File exe = new File(gameDir, "samp.exe");
         if (!exe.isFile()) {
-            return "samp.exe belum ada di\n" + gameDir.getAbsolutePath()
-                    + "\n\nUnduh paket data dulu.";
+            return "Data game belum terpasang.\n\n" + gameDir.getAbsolutePath()
+                    + "\n\nTekan \"Pilih & unduh paket\" dulu (sekali saja), "
+                    + "tunggu sampai muncul dialog \"Paket siap\".";
         }
 
         try {
