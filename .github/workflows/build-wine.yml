@@ -48,19 +48,8 @@ jobs:
             libpulse-dev libasound2-dev libdbus-1-dev libgnutls28-dev \
             libxml2-dev libxslt1-dev libssl-dev zlib1g-dev libpng-dev \
             libjpeg-dev libtiff-dev libcups2-dev libkrb5-dev libosmesa6-dev \
-            xz-utils zstd curl git
-
-      - name: Ambil llvm-mingw (aarch64-windows PE)
-        if: ${{ inputs.llvm_mingw == 'true' }}
-        run: |
-          set -e
-          URL=$(curl -s https://api.github.com/repos/mstorsjo/llvm-mingw/releases/latest \
-                | python3 -c "import json,sys;d=json.load(sys.stdin);print(next(a['browser_download_url'] for a in d['assets'] if 'ucrt-ubuntu' in a['name'] and 'aarch64' in a['name']))")
-          echo "unduh $URL"
-          curl -sL -o llvm-mingw.tar.xz "$URL"
-          mkdir -p /opt/llvm-mingw
-          tar -xf llvm-mingw.tar.xz -C /opt/llvm-mingw --strip-components=1
-          ls /opt/llvm-mingw/bin | grep -E "mingw32-(gcc|clang)$" | head
+            xz-utils zstd curl git \
+            gcc-mingw-w64-i686 binutils-mingw-w64-i686
 
       - name: Ambil source Wine
         run: |
@@ -74,13 +63,14 @@ jobs:
       - name: Configure
         run: |
           set -e
+          set -o pipefail
           cd wine-*
-          export PATH=/opt/llvm-mingw/bin:$PATH
           ./configure \
             --prefix=/opt/wine \
             --enable-archs="${{ inputs.archs }}" \
             --with-x --with-freetype --with-pulse --with-alsa --with-vulkan \
             --without-oss --without-coreaudio --without-capi \
+            --without-ldap --without-hal --without-netapi \
             --disable-tests \
             --verbose 2>&1 | tail -60
           echo "=== ringkasan configure ==="
@@ -88,15 +78,15 @@ jobs:
 
       - name: Compile
         run: |
-          set -e
+          set -eo pipefail
           cd wine-*
-          export PATH=/opt/llvm-mingw/bin:$PATH
-          make -j"$(nproc)" 2>&1 | tail -80
+          make -j"$(nproc)" 2>&1 | tail -60
 
       - name: Install + paketkan
         run: |
           set -e
           cd wine-*
+          set -o pipefail
           make install DESTDIR=/tmp/wineroot 2>&1 | tail -20
           cd /tmp/wineroot/opt/wine
           echo "=== struktur ==="
@@ -104,7 +94,7 @@ jobs:
           ls lib/wine 2>/dev/null | head
           # strip supaya ukuran mirip layer asli (~70 MB zst)
           find . -type f \( -name '*.so' -o -name 'wine' -o -name 'wineserver' \) \
-               -exec aarch64-linux-gnu-strip --strip-unneeded {} + 2>/dev/null || true
+               -exec strip --strip-unneeded {} + 2>/dev/null || true
           tar -c --owner=0 --group=0 . | zstd -19 -T0 -o /tmp/proton-ours.tar.zst
           ls -l /tmp/proton-ours.tar.zst
           sha256sum /tmp/proton-ours.tar.zst
