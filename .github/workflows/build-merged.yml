@@ -146,13 +146,18 @@ jobs:
         working-directory: winlator
         run: |
           chmod +x gradlew
-          set -o pipefail
-          ./gradlew :app:assembleDebug --no-daemon \
-            -x lint 2>&1 | tee /tmp/gradle-build.log | grep -E "^(> Task|FAILURE|\* What|\* Where|BUILD|error:|e: |Caused by|Execution failed|> )" || true
-          echo "=========== RINGKASAN ERROR ==========="
-          grep -n -E "What went wrong|error:|e: file|Caused by|FAILED|Execution failed" -A 12 /tmp/gradle-build.log | head -120 || true
-          echo "======================================="
-          exit ${PIPESTATUS[0]}
+          set +e
+          ./gradlew :app:assembleDebug --no-daemon -x lint \
+            > /tmp/gradle-build.log 2>&1
+          RC=$?
+          echo "EXIT CODE GRADLE: $RC"
+          echo "=========== 60 BARIS TERAKHIR ==========="
+          tail -60 /tmp/gradle-build.log
+          echo "=========== KONTEKS ERROR ==========="
+          grep -n -E "What went wrong|error:|error;|e: file|Caused by|FAILED|Execution failed|^> Task .*FAILED" \
+            -A 14 /tmp/gradle-build.log | head -160
+          echo "====================================="
+          exit $RC
 
       - name: Info APK
         if: always()
