@@ -270,26 +270,16 @@ jobs:
           glslangValidator --version | head -3 || true
 
       # R8 (minify + resource shrink) + ABI split untuk build rilis.
-      - name: Optimasi rilis (R8 + ABI split)
+      - name: Optimasi rilis (R8 + shrinkResources)
         run: |
           python3 - <<'PY'
           import re, pathlib
           p = pathlib.Path('winlator/app/build.gradle')
           s = p.read_text()
 
-          # 1. splits per ABI (hanya arm64-v8a yang ada di fork ini; kalau nanti
-          #    engine menambah ABI lain, tiap ABI keluar sebagai APK sendiri).
-          if 'splits {' not in s:
-              s = s.replace('    buildTypes {', """    splits {
-              abi {
-                  enable true
-                  reset()
-                  include 'arm64-v8a'
-                  universalApk false
-              }
-          }
-
-          buildTypes {""", 1)
+          # Catatan: ABI split TIDAK mungkin di fork ini karena build.gradle sudah
+          # memakai ndk.abiFilters 'arm64-v8a' (AGP menolak keduanya sekaligus),
+          # dan engine ini memang hanya membangun arm64-v8a.
 
           # 2. release: nyalakan R8 + shrink resources + daftar rules
           m = re.search(r"release\s*\{", s)
