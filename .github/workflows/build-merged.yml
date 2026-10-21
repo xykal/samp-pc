@@ -146,8 +146,13 @@ jobs:
         working-directory: winlator
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleDebug --no-daemon --stacktrace \
-            -x lint 2>&1 | tail -120
+          set -o pipefail
+          ./gradlew :app:assembleDebug --no-daemon \
+            -x lint 2>&1 | tee /tmp/gradle-build.log | grep -E "^(> Task|FAILURE|\* What|\* Where|BUILD|error:|e: |Caused by|Execution failed|> )" || true
+          echo "=========== RINGKASAN ERROR ==========="
+          grep -n -E "What went wrong|error:|e: file|Caused by|FAILED|Execution failed" -A 12 /tmp/gradle-build.log | head -120 || true
+          echo "======================================="
+          exit ${PIPESTATUS[0]}
 
       - name: Info APK
         if: always()
