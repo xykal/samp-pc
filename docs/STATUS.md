@@ -148,3 +148,39 @@ ke arm64.
 
 **Rilis:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.5.0>  
 `500.797.883 B` · sha256 `255aea2bb9d7a5de58a9413ed326dff696ba11d82c8696c9ac545a1007d7dbec` · arm64-v8a
+
+
+## 10. v1.6.0 — kenapa "gagal mengunduh" & bersih dari nama Winlator
+
+Laporan: *"gada progres bar gagal mengunduh katanya + intinya gabisa lah tolong ya lah
+dan masih ada nama winlator dll"*.
+
+### Akar masalah "gagal mengunduh"
+
+| # | Penyebab | Perbaikan |
+|---|---|---|
+| 1 | **Service di proses `:sync` membaca `SharedPreferences`** — prefs tidak sinkron antar-proses. Link Drive pilihan user bisa terbaca kosong → service gagal sebelum menulis progress apa pun. | URL + mode penyimpanan dikirim lewat **Intent** (`EXTRA_URL`, `EXTRA_MODE`), bukan prefs. |
+| 2 | Tidak ada retry: satu timeout/putus = gagal total. | **6x percobaan** + resume `Range: bytes=N-`; lanjut dari byte terakhir. |
+| 3 | `checkSpace` memakai ukuran hasil ekstrak sebelum ukuran asli diketahui → sering "ruang tidak cukup" palsu. | Cek setelah `Content-Length` sebenarnya diterima; pesan menyebut angka nyata. |
+| 4 | `pct = -1` (total belum diketahui) membuat `Bar` tidak menggambar apa pun → bar terlihat kosong. | `Bar` sekarang punya animasi **indeterminate** (segmen berjalan). |
+
+### Diagnostik
+Menu **Diagnostik** menampilkan: versi app, package, ABI, HP/Android, folder game, mode,
+ruang bebas, ukuran terpasang, URL sumber, **hasil tes HTTP ke server** (code, tipe, ukuran, waktu),
+`install.log` terakhir, dan crash terakhir. Ada tombol **Salin**.
+
+Menu **Ganti link paket** → user bisa tempel link Drive salinannya sendiri kalau file
+bawaan kena limit kuota Google (`Prefs.packUrl` / `Prefs.effectivePackUrl`).
+
+### Nama "Winlator"
+Workflow menambal resource engine: text node + nilai atribut di `res/**/*.xml`, dan
+**hanya string literal** di `app/src/main/java/**` (nama class/package tidak disentuh
+supaya JNI/refleksi aman). Sisa kata "Winlator" di APK hanya nama resource internal
+(`BTChooseWinlatorPath`, dst.) dan nama class — tidak tampil di UI.
+
+### Repo public
+`xykal/samp-pc` diubah dari private → **public** (tanpa rahasia di tree maupun riwayat;
+sudah dipindai `ghp_`/`github_pat_`/`GITHUB_TOKEN=`).
+
+**Rilis:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.6.0>  
+`500.809.555 B` · sha256 `65945de3c27f62f17b2119f69369bacbd4f920ce5a709d68f64e93388a79eee2` · arm64-v8a
