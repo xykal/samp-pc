@@ -50,7 +50,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential bison flex pkg-config gettext \
+            build-essential gcc-multilib g++-multilib bison flex pkg-config gettext \
             gcc-mingw-w64-i686 g++-mingw-w64-i686 binutils-mingw-w64-i686 \
             xz-utils zstd curl unzip file
           i686-w64-mingw32-gcc --version | head -1
@@ -110,7 +110,8 @@ jobs:
           set -eo pipefail
           mkdir -p tools-build
           cd tools-build
-          ../wine-src/configure --prefix=$PWD/../tools-inst --without-x --disable-tests 2>&1 | tail -15
+          ../wine-src/configure --prefix=$PWD/../tools-inst \
+            --enable-archs=x86_64 --without-x --disable-tests --disable-win16 2>&1 | tail -15
           make -j"$(nproc)" __tooldeps__ 2>&1 | tail -5
           make -C nls -j"$(nproc)" 2>&1 | tail -3
           ls ../wine-src/tools/winebuild/winebuild ../wine-src/tools/wrc/wrc 2>/dev/null || true
