@@ -311,8 +311,10 @@ jobs:
           -dontwarn **
           # app kita: semua dipakai lewat nama (JNI/refleksi)
           -keep class com.sampwrap.** { *; }
-          # engine: jangan di-rename (JNI Java_com_winlator_*, .desktop, JSON)
-          -keep,allowshrinking class com.winlator.** { *; }
+          # engine: JANGAN di-shrink/rename sama sekali (JNI Java_com_winlator_*,
+          # .desktop, JSON, refleksi internal). Yang dihemat: library (Compose,
+          # AndroidX, Kotlin) yang jumlahnya puluhan MB di dex.
+          -keep class com.winlator.** { *; }
           # entry point yang dipanggil app lewat refleksi (EngineBridge)
           -keep class com.winlator.cmod.container.ContainerManager { *; }
           -keep class com.winlator.cmod.container.Container { *; }
