@@ -93,6 +93,38 @@ jobs:
           echo "== hasil =="
           find "$DST/java/com/sampwrap" -name '*.java' | wc -l
 
+      # Ekstraktor RAR5/UnRAR untuk sisi Android (paket Drive bentuknya RAR).
+      - name: Pasang modul sampunrar (JNI unrar)
+        run: |
+          set -e
+          CPP=winlator/app/src/main/cpp
+          mkdir -p "$CPP/sampunrar/unrar"
+          cp -r native/unrar/. "$CPP/sampunrar/unrar/"
+          cp native/sampunrar_jni.cpp "$CPP/sampunrar/"
+
+          cat >> "$CPP/CMakeLists.txt" <<'CMAKE'
+
+          # ===== SAMP PC: ekstraktor RAR (UnRAR RARLAB) =====
+          set(SAMPUNRAR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/sampunrar)
+          file(GLOB SAMPUNRAR_SRC ${SAMPUNRAR_DIR}/unrar/*.cpp)
+          add_library(sampunrar SHARED
+                  ${SAMPUNRAR_DIR}/sampunrar_jni.cpp
+                  ${SAMPUNRAR_SRC})
+          target_compile_definitions(sampunrar PRIVATE
+                  _UNIX RARDLL RAR_SMP _FILE_OFFSET_BITS=64 _LARGEFILE_SOURCE)
+          target_compile_options(sampunrar PRIVATE
+                  -O2 -fexceptions -frtti -Wno-switch
+                  -Wno-logical-op-parentheses -Wno-dangling-else
+                  -Wno-unused-parameter -Wno-missing-field-initializers)
+          target_include_directories(sampunrar PRIVATE ${SAMPUNRAR_DIR}/unrar)
+          target_link_libraries(sampunrar log)
+          CMAKE
+
+          echo "== cek =="
+          ls "$CPP/sampunrar" | head -3
+          ls "$CPP/sampunrar/unrar" | wc -l
+          tail -5 "$CPP/CMakeLists.txt"
+
       - name: Patch AndroidManifest
         env:
           REMOVE_STOCK: ${{ inputs.remove_stock_launcher }}

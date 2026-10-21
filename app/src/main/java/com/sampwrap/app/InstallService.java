@@ -103,45 +103,194 @@ public class InstallService extends Service {
         }
     }
 
-    /** Unduh satu ZIP lalu ekstrak sesuai tier (memakai PackInstaller). */
+    /**
+     * Unduh satu arsip lalu ekstrak sesuai tier.
+     *
+     * Dua format didukung, dideteksi dari isi file (bukan dari URL):
+     *   - RAR5 (paket asli Drive) -> pakai libsampunrar bawaan APK
+     *   - ZIP                      -> PackInstaller
+     * Setelah itu unduh & ekstrak paket client SA-MP (kecil, ~24 MB).
+     */
     private void downloadArchiveAndExtract(Manifest m, EnumSet<Manifest.Tag> tags, String tier)
             throws Exception {
-        File cache = new File(getCacheDir(), "pack.zip");
-        postProgress("Mengunduh arsip…", 0, 0, true);
+        File tmp = tmpDir(this);
+        if (!tmp.exists() && !tmp.mkdirs()) throw new Exception("Tidak bisa membuat " + tmp);
+        File arc = new File(tmp, "pack.download");
 
-        String url = AppConfig.packArchiveUrl();
+        File game = GameDir.get(this);
+        String space = StorageTarget.checkSpace(game, m.totalSize(tags) + 800L * 1024 * 1024);
+        if (space != null) {
+            postProgress(space.replace("\n", " "), 0, 0, true);
+            return;
+        }
+
+        postProgress("Mengunduh paket…", 0, 0, true);
+        downloadFile(AppConfig.packArchiveUrl(), arc);
+
+        if (isRar(arc)) {
+            installRar(arc, m, tags, tmp, game);
+        } else {
+            postProgress("Mengekstrak ZIP…", 0, 0, true);
+            com.sampwrap.core.PackInstaller pi =
+                    new com.sampwrap.core.PackInstaller(m, tags, null);
+            pi.install(arc, game, false);
+        }
+        arc.delete();
+
+        installClient(tmp, game);
+
+        Prefs.setPack(this, tier);
+        postProgress("Selesai — game siap dijalankan", 0, 0, true);
+    }
+
+    /** RAR bersarang: buka RAR dalam, lalu ekstrak file sesuai tier. */
+    private void installRar(File outer, Manifest m, EnumSet<Manifest.Tag> tags,
+                            File tmp, File game) throws Exception {
+        if (!RarNative.available()) {
+            throw new Exception("Extractor RAR tidak tersedia di APK ini "
+                    + "(pakai APK gabungan / versi terbaru).");
+        }
+
+        postProgress("Membuka RAR dalam…", 0, 0, true);
+        long[] r1 = RarNative.extract(outer.getAbsolutePath(), tmp.getAbsolutePath(),
+                new String[]{"*.rar"}, null);
+        if (r1 == null || r1[0] <= 0) throw new Exception("Tidak menemukan RAR di dalam paket");
+
+        File inner = biggestRar(tmp);
+        if (inner == null) throw new Exception("RAR dalam tidak terbaca");
+        outer.delete();   // hemat ruang sebelum ekstrak 1,5 GB
+
+        final int[] last = {0};
+        String[] wanted = wantedPaths(m, tags);
+        postProgress("Mengekstrak " + wanted.length + " file…", 0, wanted.length, false);
+        long[] r2 = RarNative.extract(inner.getAbsolutePath(), game.getAbsolutePath(), wanted,
+                new RarNative.Progress() {
+                    @Override public void onData(String name, long done, long total) {
+                        postProgress("Mengekstrak… " + (done >> 20) + " MB",
+                                (int) (done >> 20), (int) (total >> 20), false);
+                    }
+                });
+        inner.delete();
+        if (r2 == null) throw new Exception("Ekstraksi gagal");
+        if (r2[0] < wanted.length) {
+            postProgress("Selesai " + r2[0] + "/" + wanted.length
+                    + " file (sisanya tidak ada di paket)", 0, 0, true);
+        }
+    }
+
+    /** Daftar path sesuai tier, tanpa file installer (samp-install/). */
+    private static String[] wantedPaths(Manifest m, EnumSet<Manifest.Tag> tags) {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        for (Manifest.Entry e : m.entries()) {
+            if (!tags.contains(e.tag)) continue;
+            if (e.path.startsWith("samp-install/")) continue;
+            out.add(e.path);
+        }
+        return out.toArray(new String[0]);
+    }
+
+    /** Client SA-MP hasil bedah installer (di-host terpisah, cuma ±24 MB). */
+    private void installClient(File tmp, File game) throws Exception {
+        String url = AppConfig.packClientUrl();
+        if (url.isEmpty()) return;
+        postProgress("Mengunduh client SA-MP…", 0, 0, true);
+        File zip = new File(tmp, "client.zip");
+        downloadFile(url, zip);
+        postProgress("Memasang SA-MP…", 0, 0, true);
+        unzipTo(zip, game);
+        zip.delete();
+    }
+
+    private static boolean isRar(File f) {
+        try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+            byte[] b = new byte[8];
+            if (in.read(b) < 8) return false;
+            // "Rar!\x1a\x07" (RAR4 maupun RAR5)
+            return b[0] == 'R' && b[1] == 'a' && b[2] == 'r' && b[3] == '!'
+                    && b[4] == 0x1a && b[5] == 0x07;
+        } catch (java.io.IOException e) {
+            return false;
+        }
+    }
+
+    private static File biggestRar(File dir) {
+        File[] fs = dir.listFiles();
+        if (fs == null) return null;
+        File best = null;
+        for (File f : fs) {
+            if (!f.isFile() || !f.getName().toLowerCase().endsWith(".rar")) continue;
+            if (best == null || f.length() > best.length()) best = f;
+        }
+        return best;
+    }
+
+    private static File tmpDir(Context c) {
+        File game = GameDir.get(c);
+        return new File(game.getParentFile() != null ? game.getParentFile() : game, ".tmp");
+    }
+
+    /** Unduh dengan resume (HTTP Range) + progress notifikasi. */
+    private void downloadFile(String url, File dst) throws Exception {
+        long have = dst.isFile() ? dst.length() : 0;
         java.net.HttpURLConnection c;
         if (com.sampwrap.core.DriveDownloader.isDrive(url)) {
-            // link Drive "share" -> resolve ke file asli (handle halaman konfirmasi)
             c = com.sampwrap.core.DriveDownloader.open(url);
         } else {
             c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
             c.setConnectTimeout(20000);
             c.setReadTimeout(30000);
         }
+        if (have > 0) c.setRequestProperty("Range", "bytes=" + have + "-");
+
+        int code = c.getResponseCode();
+        if (code == 416) return;                       // sudah lengkap
+        if (code != 200 && code != 206) throw new Exception("HTTP " + code);
+
         long len = c.getContentLengthLong();
+        long total = code == 206 ? have + len : len;
+        boolean append = code == 206;
+        if (!append) have = 0;
+
         try (java.io.InputStream in = new java.io.BufferedInputStream(c.getInputStream());
-             java.io.FileOutputStream fos = new java.io.FileOutputStream(cache)) {
+             java.io.FileOutputStream fos = new java.io.FileOutputStream(dst, append)) {
             byte[] buf = new byte[128 * 1024];
-            long done = 0;
+            long done = have;
             int n;
             while ((n = in.read(buf)) > 0) {
                 fos.write(buf, 0, n);
                 done += n;
-                if (len > 0) postProgress("Arsip " + (100 * done / len) + "%", (int) done, (int) len, false);
+                if (total > 0) {
+                    postProgress("Mengunduh " + (100 * done / total) + "%  ("
+                            + (done >> 20) + "/" + (total >> 20) + " MB)",
+                            (int) (done >> 20), (int) (total >> 20), false);
+                }
             }
         } finally {
             c.disconnect();
         }
+    }
 
-        postProgress("Mengekstrak…", 0, 0, true);
-        com.sampwrap.core.PackInstaller pi =
-                new com.sampwrap.core.PackInstaller(m, tags, null);
-        com.sampwrap.core.PackInstaller.Result r =
-                pi.install(cache, GameDir.get(this), false);
-        Prefs.setPack(this, tier);
-        cache.delete();
-        postProgress("Selesai: " + r, 0, 0, true);
+    /** Unzip sederhana + proteksi zip-slip. */
+    private static void unzipTo(File zip, File outDir) throws Exception {
+        String root = outDir.getCanonicalPath() + File.separator;
+        try (java.util.zip.ZipInputStream zin =
+                     new java.util.zip.ZipInputStream(new java.io.FileInputStream(zip))) {
+            java.util.zip.ZipEntry e;
+            byte[] buf = new byte[64 * 1024];
+            while ((e = zin.getNextEntry()) != null) {
+                String name = e.getName().replace('\\', '/');
+                if (name.startsWith("/") || name.contains("..")) continue;
+                File f = new File(outDir, name);
+                if (!f.getCanonicalPath().startsWith(root)) continue;
+                if (e.isDirectory()) { f.mkdirs(); continue; }
+                File parent = f.getParentFile();
+                if (parent != null) parent.mkdirs();
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(f)) {
+                    int n;
+                    while ((n = zin.read(buf)) > 0) fos.write(buf, 0, n);
+                }
+            }
+        }
     }
 
     private static String basename(String p) {

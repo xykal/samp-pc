@@ -55,6 +55,14 @@ public final class AppConfig {
         return get("pack.archiveUrl", "");
     }
 
+    /**
+     * Paket client SA-MP (hasil bedah installer: samp.exe, samp.dll, SAMP/).
+     * Kosong = lewati. Di-host terpisah karena kecil (±24 MB) dan bebas dibagi.
+     */
+    public static String packClientUrl() {
+        return get("pack.clientUrl", "");
+    }
+
     public static String manifestUrl() {
         String base = packBaseUrl();
         if (base.isEmpty()) return "";
