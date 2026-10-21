@@ -101,3 +101,32 @@ Engine memang hanya menghasilkan arm64-v8a, jadi tidak ada ABI lain untuk dipisa
 Kalau mau jauh lebih kecil, opsinya: pindahkan imagefs/proton/pattern ke
 unduhan saat pertama buka (hemat ±325 MB), atau kirim hanya driver+DXVK yang
 dipakai device (hemat ±90 MB). Keduanya menyentuh alur engine, belum dikerjakan.
+
+
+## 8. v1.4.0 — UI sendiri, progress bar, anti force-close
+
+Keluhan yang masuk: *"ui nya jangan ada bawaan android, pas download data kok
+gada progres bar nya, pas download selesai kok app nya force close, dan gua tes
+di MEmu"*.
+
+| Masalah | Penyebab | Perbaikan |
+|---|---|---|
+| tidak ada progress bar | `MainActivity` tidak pernah me-refresh; service cuma update notifikasi | `ProgressBus` (file `files/progress.txt`) + polling UI tiap 400 ms → dialog progress sendiri |
+| force close saat download selesai | ekstraksi native jalan di proses app yang sama; SIGSEGV unrar = seluruh app mati | service dipindah ke `android:process=":sync"`; crash ekstraksi cuma mematikan proses itu |
+| UI bawaan Android | `AlertDialog` + `ProgressDialog` | `UiDialog` (Alert/Progress/Bar) + `Spinner`, semua view buatan sendiri |
+| app menggantung | proses `:sync` mati tanpa jejak | heartbeat 3 dtk di service, UI menganggap gagal kalau progress basi >25 dtk |
+| penyebab tidak diketahui | tidak ada log | `CrashGuard` → `files/last_crash.txt`, bisa dibuka dari dialog |
+
+Tambahan: ikon sendiri + nama **SAMP PC**, launcher lama Winlator dihapus
+(1 ikon saja), cek ABI di tombol "Jalankan".
+
+**Rilis:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.4.0>  
+`500.793.659 B` · sha256 `ae5053108b4add2c2763f91db5f09460ab2222cce142f55e0c825cd2d2a9c927` · arm64-v8a · minSdk 28
+
+### Soal armeabi-v7a
+APK v7a **tidak bisa dibuat dari build ini**: seluruh engine (Wine, Box64,
+`libsampunrar.so`) di-compile arm64-v8a saja (`ndk.abiFilters 'arm64-v8a'`),
+dan `splits.abi` ditolak AGP selama `abiFilters` aktif. v7a butuh engine
+32-bit yang benar-benar lain (Wine 32-bit + **Box86**, bukan Box64) — itu porting
+terpisah, bukan pemisahan APK. Emulator x86 seperti MEmu juga tidak bisa
+menjalankan APK arm64 kecuali image-nya punya ARM translation.
