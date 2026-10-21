@@ -52,7 +52,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential gcc-multilib g++-multilib bison flex pkg-config gettext \
             gcc-mingw-w64-i686 g++-mingw-w64-i686 binutils-mingw-w64-i686 \
-            xz-utils zstd curl unzip file
+            xz-utils zstd curl unzip file \
+            libx11-dev libxext-dev libxrender-dev libxrandr-dev libxfixes-dev \
+            libxcursor-dev libxi-dev libxcomposite-dev libxinerama-dev libxcb1-dev
           i686-w64-mingw32-gcc --version | head -1
 
       - name: Android NDK
@@ -132,7 +134,8 @@ jobs:
           export CXX="$TC/bin/aarch64-linux-android${API}-clang++"
           export AR=llvm-ar RANLIB=llvm-ranlib STRIP=llvm-strip LD=ld.lld
           export CFLAGS="-O2 -fPIC -D__ANDROID_API__=${API}"
-          export LDFLAGS="-fuse-ld=lld"
+          # .so bionic (ARM64) ada di imagefs, jangan sampai ke-link lib x86 host
+          export LDFLAGS="-L/opt/imagefs/usr/lib -fuse-ld=lld"
 
           # bionic tidak punya beberapa fungsi glibc -> beri tahu cache
           export ac_cv_func_getpwent=no ac_cv_func_getpwnam=no ac_cv_func_getpwuid=no
@@ -142,7 +145,7 @@ jobs:
           unset PKG_CONFIG_PATH
 
           # configure kadang mengabaikan --without-* saat cross; paksa lewat env
-          with_x=no with_freetype=no with_fontconfig=no with_vulkan=no \
+          with_x=yes enable_wineandroid_drv=no with_freetype=no with_fontconfig=no with_vulkan=no \
           with_pulse=no with_alsa=no with_oss=no with_gstreamer=no with_dbus=no \
           ../wine-src/configure \
             --host=aarch64-linux-android \
@@ -150,7 +153,8 @@ jobs:
             --prefix=/opt/wine-ours \
             --enable-archs=i386 \
             --with-mingw=i686-w64-mingw32 \
-            --without-x --without-freetype --without-fontconfig \
+            --with-x --x-includes=/usr/include --x-libraries=/opt/imagefs/usr/lib \
+            --without-freetype --without-fontconfig \
             --without-vulkan --without-pulse --without-alsa --without-oss \
             --without-gstreamer --without-dbus --without-gnutls --without-krb5 \
             --without-cups --without-sane --without-udev --without-usb --without-v4l2 \
