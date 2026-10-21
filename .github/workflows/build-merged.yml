@@ -269,12 +269,84 @@ jobs:
           which glslangValidator || ls -l /usr/bin/glslang* || true
           glslangValidator --version | head -3 || true
 
+      # R8 (minify + resource shrink) + ABI split untuk build rilis.
+      - name: Optimasi rilis (R8 + ABI split)
+        run: |
+          python3 - <<'PY'
+          import re, pathlib
+          p = pathlib.Path('winlator/app/build.gradle')
+          s = p.read_text()
+
+          # 1. splits per ABI (hanya arm64-v8a yang ada di fork ini; kalau nanti
+          #    engine menambah ABI lain, tiap ABI keluar sebagai APK sendiri).
+          if 'splits {' not in s:
+              s = s.replace('    buildTypes {', """    splits {
+              abi {
+                  enable true
+                  reset()
+                  include 'arm64-v8a'
+                  universalApk false
+              }
+          }
+
+          buildTypes {""", 1)
+
+          # 2. release: nyalakan R8 + shrink resources + daftar rules
+          m = re.search(r"release\s*\{", s)
+          if not m:
+              raise SystemExit('blok release tidak ditemukan')
+          i = m.end(); depth = 1; j = i
+          while j < len(s) and depth:
+              if s[j] == '{': depth += 1
+              elif s[j] == '}': depth -= 1
+              j += 1
+          block = s[i:j-1]
+          block = block.replace('minifyEnabled false', 'minifyEnabled true')
+          if 'shrinkResources' not in block:
+              block = block.replace('signingConfig signingConfigs.debug',
+                                    'signingConfig signingConfigs.debug\n            shrinkResources true')
+          if 'proguardFiles' not in block:
+              block = block.replace('minifyEnabled true',
+                                    "minifyEnabled true\n            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'")
+          s = s[:i] + block + s[j-1:]
+          p.write_text(s)
+          print('--- release block ---')
+          print(re.search(r"release\s*\{[^}]*\}", s).group(0))
+
+          # 3. keep rules
+          rules = pathlib.Path('winlator/app/proguard-rules.pro')
+          rules.write_text(rules.read_text() + """
+
+          # ===== SAMP PC =====
+          -dontwarn **
+          # app kita: semua dipakai lewat nama (JNI/refleksi)
+          -keep class com.sampwrap.** { *; }
+          # engine: jangan di-rename (JNI Java_com_winlator_*, .desktop, JSON)
+          -keep,allowshrinking class com.winlator.** { *; }
+          # entry point yang dipanggil app lewat refleksi (EngineBridge)
+          -keep class com.winlator.cmod.container.ContainerManager { *; }
+          -keep class com.winlator.cmod.container.Container { *; }
+          -keep class com.winlator.cmod.contents.ContentsManager { *; }
+          -keep class com.winlator.cmod.XServerDisplayActivity { *; }
+          -keep class com.winlator.cmod.MainActivity { *; }
+          # JNI
+          -keepclasseswithmembernames,includedescriptorclasses class * { native <methods>; }
+          # Android komponen
+          -keep class * extends android.app.Service { *; }
+          -keep class * extends android.app.Activity { *; }
+          -keep class * extends android.content.ContentProvider { *; }
+          """)
+          print('--- rules ---')
+          print(rules.read_text()[-600:])
+          PY
+          grep -n "minifyEnabled\|shrinkResources\|splits {" winlator/app/build.gradle | head
+
       - name: Build APK gabungan
         working-directory: winlator
         run: |
           chmod +x gradlew
           set +e
-          ./gradlew :app:assembleDebug --no-daemon -x lint \
+          ./gradlew :app:assembleRelease --no-daemon -x lint -x lintVitalRelease \
             > /tmp/gradle-build.log 2>&1
           RC=$?
           echo "EXIT CODE GRADLE: $RC"
@@ -306,6 +378,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: samp-pc-merged-apk
-          path: winlator/app/build/outputs/apk/debug/*.apk
+          path: winlator/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
