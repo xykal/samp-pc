@@ -23,7 +23,9 @@ Terakhir diperbarui: 2026-10-21
 ## 2. Link
 
 - Repo: https://github.com/xykal/samp-pc
-- **APK gabungan v1.2.0 (install ini — tanpa tempel link apa pun):**
+- **APK gabungan v1.3.0 (R8, 501 MB — install ini):**
+  https://github.com/xykal/samp-pc-download/releases/download/v1.3.0/samp-pc-v1.3.0-merged.apk
+- Cadangan kalau v1.3.0 bermasalah (debug, tanpa R8, 572 MB):
   https://github.com/xykal/samp-pc-download/releases/download/v1.2.0/samp-pc-v1.2.0-merged-debug.apk
 - APK frontend saja:
   https://github.com/xykal/samp-pc-download/releases/download/v1.1.0/samp-pc-v1.1.0-frontend-debug.apk
@@ -65,3 +67,37 @@ client SA-MP sudah ditanam di dalam APK (`assets/app_config.properties`).
 1. Ganti `app.label` + `server.default` di `assets/app_config.properties`.
 2. Upload ZIP ke Drive → isi `pack.archiveUrl`.
 3. (Opsional) host sendiri pakai Cloudflare R2 + `make_manifest.py` untuk mode per-file.
+
+
+## 7. Ukuran APK — R8 & ABI
+
+| | debug (v1.2.0) | R8 (v1.3.0) |
+|---|---|---|
+| APK | 572 MB | **501 MB** |
+| dex (kode) | 76,4 MB | **6,5 MB** |
+| waktu build CI | ±40 menit | ±9 menit |
+
+R8 dipasang di `release` (`minifyEnabled true`, `shrinkResources true`).
+Engine `com.winlator.**` **di-keep utuh** (tidak di-obfuscate) karena dipanggil
+JNI + refleksi; yang menyusut library Compose/AndroidX/Kotlin yang tak terpakai.
+
+**Soal split per-ABI:** tidak bisa dan tidak berguna di build ini —
+`build.gradle` fork sudah memakai `ndk.abiFilters 'arm64-v8a'`, dan AGP
+menolak `splits.abi` saat keduanya aktif
+(`Conflicting configuration ... in ndk abiFilters cannot be present when splits abi filters are set`).
+Engine memang hanya menghasilkan arm64-v8a, jadi tidak ada ABI lain untuk dipisah.
+
+**Sisa berat ada di assets, bukan kode:**
+
+| Komponen | Ukuran |
+|---|---|
+| `imagefs.tar.zst` | 193 MB |
+| proton (arm64ec + pattern) | 92 MB |
+| graphics driver (beberapa varian) | 46 MB |
+| dxwrapper (beberapa versi DXVK) | 46 MB |
+| container pattern | 40 MB |
+| wincomponents | 38 MB |
+
+Kalau mau jauh lebih kecil, opsinya: pindahkan imagefs/proton/pattern ke
+unduhan saat pertama buka (hemat ±325 MB), atau kirim hanya driver+DXVK yang
+dipakai device (hemat ±90 MB). Keduanya menyentuh alur engine, belum dikerjakan.
