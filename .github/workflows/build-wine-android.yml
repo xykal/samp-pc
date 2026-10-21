@@ -107,6 +107,16 @@ jobs:
           ls /opt/imagefs/usr/include 2>/dev/null | head -3 || echo "(tanpa header)"
           rm -f apk.apk
 
+      - name: Header X11 (terpisah dari glibc host)
+        run: |
+          set -e
+          # JANGAN pakai -I/usr/include: header glibc host (pthread.h) akan
+          # menimpa header bionic dari NDK.
+          mkdir -p /opt/xinc
+          cp -r /usr/include/X11 /opt/xinc/
+          [ -d /usr/include/xcb ] && cp -r /usr/include/xcb /opt/xinc/ || true
+          ls /opt/xinc | head
+
       - name: Stage 0 — native tools (host)
         run: |
           set -eo pipefail
@@ -153,7 +163,7 @@ jobs:
             --prefix=/opt/wine-ours \
             --enable-archs=i386 \
             --with-mingw=i686-w64-mingw32 \
-            --with-x --x-includes=/usr/include --x-libraries=/opt/imagefs/usr/lib \
+            --with-x --x-includes=/opt/xinc --x-libraries=/opt/imagefs/usr/lib \
             --without-freetype --without-fontconfig \
             --without-vulkan --without-pulse --without-alsa --without-oss \
             --without-gstreamer --without-dbus --without-gnutls --without-krb5 \
