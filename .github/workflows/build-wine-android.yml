@@ -138,6 +138,9 @@ jobs:
           export ac_cv_func_openpty=yes ac_cv_func_fork=yes
           unset PKG_CONFIG_PATH
 
+          # configure kadang mengabaikan --without-* saat cross; paksa lewat env
+          with_x=no with_freetype=no with_fontconfig=no with_vulkan=no \
+          with_pulse=no with_alsa=no with_oss=no with_gstreamer=no with_dbus=no \
           ../wine-src/configure \
             --host=aarch64-linux-android \
             --with-wine-tools=../tools-build \
@@ -152,8 +155,15 @@ jobs:
             --without-opencl --without-ffmpeg --without-sdl --without-openal \
             --without-mpg123 --without-gphoto --without-pcap --without-pcsclite \
             --disable-tests --disable-win16 \
-            2>&1 | tail -40
+            > configure.out 2>&1 || {
+              echo "===== CONFIGURE GAGAL =====";
+              tail -25 configure.out;
+              echo "----- config.log (ekor) -----";
+              tail -60 config.log || true;
+              exit 1;
+            }
 
+          tail -25 configure.out
           echo "=== config.h inti ==="
           grep -E "HAVE_(FORK|EXECV|POSIX_SPAWN|PTHREAD)_" include/config.h | head -8 || true
 
