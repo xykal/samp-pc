@@ -485,6 +485,23 @@ public class MainActivity extends Activity {
     // --------------------------------------------------------------- launch ----
 
     private void launchGame() {
+        // ---- APK gabungan: engine ada di dalam app ini sendiri ----------
+        if (EngineBridge.enginePresent()) {
+            if (preset == null) { toast("Scan perangkat belum selesai"); return; }
+            ContainerPreset cp = ContainerPreset.forDevice(
+                    AppConfig.appLabel(), preset, GameDir.describe(this));
+            String err = EngineBridge.play(this, GameDir.get(this), cp);
+            if (err != null) {
+                new AlertDialog.Builder(this)
+                        .setTitle("Tidak bisa jalan")
+                        .setMessage(err)
+                        .setPositiveButton("OK", null)
+                        .show();
+            }
+            return;
+        }
+
+        // ---- mode lama: engine Winlator terpisah ------------------------
         String[] pkgs = {
                 "com.sampwrap.winlator", "com.winlator",
                 "com.winlator.cmod", "com.winlator.banner", "com.winlator.ludashi"
