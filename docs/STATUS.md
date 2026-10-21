@@ -184,3 +184,33 @@ sudah dipindai `ghp_`/`github_pat_`/`GITHUB_TOKEN=`).
 
 **Rilis:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.6.0>  
 `500.809.555 B` · sha256 `65945de3c27f62f17b2119f69369bacbd4f920ce5a709d68f64e93388a79eee2` · arm64-v8a
+
+
+## 11. v1.7.0 — bug DONE di tahap antara (progres hilang) 
+
+Laporan user (Diagnostik v1.6.0): unduhan **berhasil** 712.800.749 B dalam 72 dtk,
+HTTP 200, tipe `application/octet-stream` — tapi "progres di app ngga ada",
+"terpasang 0 B", dan setelah selesai tidak terjadi apa-apa.
+
+**Akar masalah:** `postProgress(text, idx, total, done=true)` dipakai untuk
+tahap antara ("Mengunduh paket…", "Membuka RAR dalam…", "Memasang SA-MP…").
+Tiap panggilan menulis `ProgressBus.done()`; `MainActivity` melihat DONE →
+tampilkan "Paket siap" → `ProgressBus.idle()` → **berhenti polling**. Setelah
+itu semua update RUNNING tidak pernah dibaca lagi. Itu juga sebabnya
+"terpasang 0 B" (refreshStorage dipanggil terlalu dini) dan tidak ada kabar
+setelah unduh.
+
+**Perbaikan v1.7.0**
+
+| Perubahan | Alasan |
+|---|---|
+| `done=true` hanya di akhir (2 tempat) | tahap antara tidak lagi menandai selesai |
+| Kartu progress **inline** di layar utama | dialog bisa ketutup/terlewat; kartu tidak |
+| `alertState` guard | dialog "Paket siap"/"Gagal" tidak dobel |
+| Log rinci ekstraksi (`RarNative tersedia`, pass 1, rar dalam, pass 2, ukuran, isi folder) | tahu persis di tahap mana berhenti |
+| Pagar `samp.exe` setelah ekstrak | tidak ada lagi "selesai" palsu |
+| Diagnostik: `RAR`, `samp.exe`, `ISI` | langsung kelihatan kalau lib unrar gagal dimuat |
+| Banner x86 + dialog "data belum ada" di tombol Jalankan | user di MEmu paham batasnya |
+
+**Rilis:** <https://github.com/xykal/samp-pc-download/releases/tag/v1.7.0>  
+`500.813.447 B` · sha256 `d578bc14c0929ab7264072d76338d917f009d31311e1715194b34c4fdf1ddc6c`
