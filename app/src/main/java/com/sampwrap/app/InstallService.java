@@ -23,9 +23,13 @@ public class InstallService extends Service {
 
     public static final String ACTION_START = "com.sampwrap.app.DOWNLOAD";
     public static final String EXTRA_TIER = "tier";
+    public static final String EXTRA_URL = "pack_url";
+    public static final String EXTRA_MODE = "storage_mode";
     private static final String CHANNEL = "download";
     private static final int NOTIF_ID = 41;
 
+    /** URL paket yang dipakai proses ini (dari Intent, bukan prefs). */
+    private String packUrl = "";
     private volatile boolean running;
     private volatile boolean failed;
     private volatile String failMsg;
@@ -36,6 +40,10 @@ public class InstallService extends Service {
         Intent i = new Intent(ctx, InstallService.class);
         i.setAction(ACTION_START);
         i.putExtra(EXTRA_TIER, tier);
+        // dikirim lewat Intent: SharedPreferences tidak sinkron antar-proses,
+        // jadi service (:sync) tidak boleh mengandalkan prefs milik UI
+        i.putExtra(EXTRA_URL, Prefs.effectivePackUrl(ctx));
+        i.putExtra(EXTRA_MODE, StorageTarget.currentMode(ctx).name());
         ctx.startForegroundService(i);
     }
 
@@ -64,6 +72,16 @@ public class InstallService extends Service {
 
     private int onStartSafe(Intent intent) {
         AppConfig.load(this);
+        if (intent != null) {
+            String url = intent.getStringExtra(EXTRA_URL);
+            if (url != null) packUrl = url;
+            String mode = intent.getStringExtra(EXTRA_MODE);
+            if (mode != null) {
+                try { StorageTarget.setMode(this, StorageTarget.Mode.valueOf(mode)); }
+                catch (Throwable ignored) {}
+            }
+        }
+        if (packUrl == null || packUrl.isEmpty()) packUrl = Prefs.effectivePackUrl(this);
         String tier = intent == null ? Prefs.pack(this) : intent.getStringExtra(EXTRA_TIER);
         if (tier == null) tier = "lite";
 
@@ -81,8 +99,8 @@ public class InstallService extends Service {
         failed = false;
         ProgressBus.running(this, -1, "Menyiapkan…");
         InstallLog.w(this, "=== mulai tier " + tier + " ===");
-        InstallLog.w(this, "sumber: " + (Prefs.effectivePackUrl(this).isEmpty()
-                ? "(per-file) " + AppConfig.packBaseUrl() : Prefs.effectivePackUrl(this)));
+        InstallLog.w(this, "sumber: " + (packUrl == null || packUrl.isEmpty()
+                ? "(per-file) " + AppConfig.packBaseUrl() : packUrl));
         Heartbeat hb = new Heartbeat();
         hb.start();
         boolean ok = false;
@@ -91,7 +109,7 @@ public class InstallService extends Service {
             EnumSet<Manifest.Tag> tags = Manifest.tagsFor(tier);
 
             // Mode A: satu arsip ZIP (lebih simpel untuk hosting)
-            if (!Prefs.effectivePackUrl(this).isEmpty()) {
+            if (packUrl != null && !packUrl.isEmpty()) {
                 downloadArchiveAndExtract(m, tags, tier);
                 return;
             }
@@ -181,7 +199,7 @@ public class InstallService extends Service {
         if (space != null) throw new Exception(space.replace('\n', ' '));
 
         postProgress("Mengunduh paket…", 0, 0, true);
-        downloadFile(Prefs.effectivePackUrl(this), arc, "paket",
+        downloadFile(packUrl, arc, "paket",
                 m.totalSize(tags) + 300L * 1024 * 1024);
 
         if (isRar(arc)) {
