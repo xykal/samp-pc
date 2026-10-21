@@ -36,12 +36,47 @@ jobs:
 
       - name: Clone fork Winlator
         run: |
+          set -x
           git clone --depth 1 --branch "${{ inputs.fork_branch }}" \
             "https://github.com/${{ inputs.fork_repo }}.git" winlator
           echo "== struktur =="
           ls winlator
           grep -m1 "namespace" winlator/app/build.gradle || true
           grep -m1 "distributionUrl" winlator/gradle/wrapper/gradle-wrapper.properties || true
+
+      # adrenotools & OpenXR-SDK adalah git submodule. Clone dangkal TIDAK
+      # membawanya, akibatnya CMake gagal: "adrenotools does not contain a
+      # CMakeLists.txt file". Ambil submodule, lalu fallback clone manual.
+      - name: Ambil git submodule (adrenotools + OpenXR-SDK)
+        run: |
+          set -x
+          git -C winlator submodule update --init --recursive --depth 1 \
+            app/src/main/cpp/OpenXR-SDK app/src/main/cpp/adrenotools || true
+          git -C winlator submodule update --init --recursive --depth 1 || true
+
+          if [ ! -f winlator/app/src/main/cpp/adrenotools/CMakeLists.txt ]; then
+            echo "adrenotools kosong -> clone manual"
+            rm -rf winlator/app/src/main/cpp/adrenotools
+            git clone --depth 1 --recurse-submodules --shallow-submodules \
+              https://github.com/Pipetto-crypto/libadrenotools.git \
+              winlator/app/src/main/cpp/adrenotools
+          fi
+
+          if [ ! -f winlator/app/src/main/cpp/OpenXR-SDK/CMakeLists.txt ]; then
+            echo "OpenXR-SDK kosong -> clone manual"
+            rm -rf winlator/app/src/main/cpp/OpenXR-SDK
+            git clone --depth 1 --branch release-1.1.38 --recurse-submodules \
+              https://github.com/KhronosGroup/OpenXR-SDK.git \
+              winlator/app/src/main/cpp/OpenXR-SDK \
+              || git clone --depth 1 --recurse-submodules \
+                   https://github.com/KhronosGroup/OpenXR-SDK.git \
+                   winlator/app/src/main/cpp/OpenXR-SDK
+          fi
+
+          echo "== cek submodule =="
+          ls winlator/app/src/main/cpp/adrenotools | head -20
+          test -f winlator/app/src/main/cpp/adrenotools/CMakeLists.txt && echo "adrenotools OK"
+          test -f winlator/app/src/main/cpp/OpenXR-SDK/CMakeLists.txt && echo "OpenXR OK"
 
       - name: Tempel source + assets SAMP PC
         run: |
