@@ -331,6 +331,28 @@ jobs:
           PY
           grep -n "minifyEnabled\|shrinkResources\|splits {" winlator/app/build.gradle | head
 
+      # Fork punya salinan res/drawable AppCompat (abc_btn_check_material_anim.xml
+      # dll) yang menunjuk @id/checked|unchecked|on|off, tapi res/values/ids.xml
+      # tidak ada -> AAPT gagal di build release ("resource id/checked not found").
+      - name: Tambah res/values/ids.xml yang hilang
+        run: |
+          F=winlator/app/src/main/res/values/ids.xml
+          if [ ! -f "$F" ]; then
+          cat > "$F" <<'XML'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <item name="checked" type="id"/>
+              <item name="unchecked" type="id"/>
+              <item name="on" type="id"/>
+              <item name="off" type="id"/>
+              <item name="checkedButton" type="id"/>
+              <item name="snackbar_action" type="id"/>
+              <item name="snackbar_text" type="id"/>
+          </resources>
+          XML
+          fi
+          cat "$F"
+
       - name: Build APK gabungan
         working-directory: winlator
         run: |
