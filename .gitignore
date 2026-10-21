@@ -1,0 +1,13 @@
+# build
+.gradle/
+build/
+out/
+local.properties
+*.iml
+.idea/
+# data besar
+work/
+*.rar
+*.zip
+*.img
+*.exe

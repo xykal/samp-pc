@@ -1,0 +1,121 @@
+name: Build Merged APK (Winlator + SAMP PC)
+
+# Template: clone fork Winlator, tempel source SAMP PC, build satu APK.
+# Jalankan manual setelah kamu menyesuaikan langkah patch di bawah.
+# Butuh secret: FORK_REPO (mis. StevenMXZ/Winlator-Ludashi), FORK_BRANCH (opsional).
+
+on:
+  workflow_dispatch:
+    inputs:
+      fork_repo:
+        description: 'repo fork Winlator (owner/name)'
+        required: true
+        default: 'StevenMXZ/Winlator-Ludashi'
+      fork_branch:
+        description: 'branch'
+        required: true
+        default: 'main'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout SAMP PC (source app kita)
+        uses: actions/checkout@v4
+        with:
+          path: samp
+
+      - name: Clone fork Winlator
+        run: |
+          git clone --depth 1 --branch "${{ inputs.fork_branch }}" \
+            "https://github.com/${{ inputs.fork_repo }}.git" winlator
+
+      - name: Tempel source SAMP PC
+        run: |
+          set -e
+          mkdir -p winlator/app/src/main/java/com/sampwrap
+          cp -r samp/app/app/src/main/java/com/sampwrap/app  winlator/app/src/main/java/com/sampwrap/
+          cp -r samp/app/app/src/main/java/com/sampwrap/core winlator/app/src/main/java/com/sampwrap/
+          mkdir -p winlator/app/src/main/assets
+          cp samp/app/app/src/main/assets/control_layout.json   winlator/app/src/main/assets/
+          cp samp/app/app/src/main/assets/manifest_default.tsv  winlator/app/src/main/assets/
+          echo "== hasil tempel =="
+          find winlator/app/src/main/java/com/sampwrap -name '*.java' | head -20
+
+      - name: Tambah BuildConfig fields
+        run: |
+          python3 - <<'PY'
+          import re, pathlib
+          p = pathlib.Path('winlator/app/build.gradle')
+          if not p.exists():
+              p = pathlib.Path('winlator/app/build.gradle.kts')
+          s = p.read_text()
+          block = '''
+              buildConfigField "String", "APP_LABEL",        "\\"SAMP PC\\""
+              buildConfigField "String", "DEFAULT_SERVER",   "\\"play.domainkamu.com:7777\\""
+              buildConfigField "String", "PACK_BASE_URL",    "\\"https://cdn.domainkamu.com/samp\\""
+              buildConfigField "String", "PACK_ARCHIVE_URL", "\\"\\""
+          '''
+          if 'buildConfigField' not in s:
+              if 'buildFeatures {' in s:
+                  s = s.replace('buildFeatures {', 'buildFeatures {\n        buildConfig true')
+              else:
+                  s = s.replace('defaultConfig {', 'defaultConfig {' + block, 1)
+                  s = re.sub(r'(android\s*\{)', r'\1\n    buildFeatures {\n        buildConfig true\n    }', s, count=1)
+          p.write_text(s)
+          print(p.read_text()[:1200])
+          PY
+
+      - name: Patch AndroidManifest (launcher SAMP PC)
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          p = pathlib.Path('winlator/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          # hapus launcher lama supaya cuma satu ikon
+          s = re.sub(r'<intent-filter>\s*<action android:name="android.intent.action.MAIN"\s*/>\s*<category android:name="android.intent.category.LAUNCHER"\s*/>\s*</intent-filter>', '', s)
+          new = '''<activity android:name="com.sampwrap.app.MainActivity"
+                android:exported="true"
+                android:screenOrientation="portrait">
+              <intent-filter>
+                  <action android:name="android.intent.action.MAIN" />
+                  <category android:name="android.intent.category.LAUNCHER" />
+              </intent-filter>
+          </activity>
+
+          <activity android:name="com.sampwrap.app.ControlsActivity"
+                android:exported="false"
+                android:screenOrientation="landscape" />
+
+          <service android:name="com.sampwrap.app.InstallService"
+                android:exported="false"
+                android:foregroundServiceType="dataSync" />
+          '''
+          s = s.replace('</application>', new + '</application>')
+          p.write_text(s)
+          print('manifest dipatch')
+          PY
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build APK gabungan
+        run: |
+          cd winlator
+          chmod +x gradlew || true
+          gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: samp-pc-merged-apk
+          path: winlator/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
