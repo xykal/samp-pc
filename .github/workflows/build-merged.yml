@@ -78,6 +78,22 @@ jobs:
           test -f winlator/app/src/main/cpp/adrenotools/CMakeLists.txt && echo "adrenotools OK"
           test -f winlator/app/src/main/cpp/OpenXR-SDK/CMakeLists.txt && echo "OpenXR OK"
 
+      - name: Branding (ikon + nama app)
+        run: |
+          set -e
+          R=winlator/app/src/main/res
+          S=samp/branding/res
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            mkdir -p "$R/mipmap-$d"
+            cp -f "$S/mipmap-$d/ic_launcher.png"       "$R/mipmap-$d/"
+            cp -f "$S/mipmap-$d/ic_launcher_round.png" "$R/mipmap-$d/"
+            cp -f "$S/mipmap-$d/ic_launcher_fore.png"  "$R/mipmap-$d/"
+          done
+          mkdir -p "$R/mipmap-anydpi-v26"
+          cp -f "$S/mipmap-anydpi-v26/"*.xml "$R/mipmap-anydpi-v26/"
+          cp -f "$S/values/ic_launcher_bg.xml" "$R/values/"
+          ls -l "$R/mipmap-xxhdpi" | head
+
       - name: Tempel source + assets SAMP PC
         run: |
           set -e
@@ -185,18 +201,23 @@ jobs:
           s = p.read_text()
 
           if os.environ.get('REMOVE_STOCK', 'true') == 'true':
-              # buang launcher lama supaya hanya ada satu ikon
-              s = re.sub(
-                  r'<intent-filter>\s*<action android:name="android\.intent\.action\.MAIN"\s*/>\s*'
-                  r'<category android:name="android\.intent\.category\.LAUNCHER"\s*/>\s*</intent-filter>',
-                  '', s)
-              print('launcher lama dihapus')
+              # buang SEMUA intent-filter LAUNCHER (format apa pun), nanti
+              # launcher kita ditambahkan lewat blok di bawah
+              pat = re.compile(
+                  r'<intent-filter[^>]*>(?:(?!</intent-filter>).)*?'
+                  r'category\.LAUNCHER(?:(?!</intent-filter>).)*?</intent-filter>',
+                  re.S)
+              s, n = pat.subn('', s)
+              print('launcher lama dihapus:', n)
+
+          # nama aplikasi
+          s = s.replace('android:label="Winlator Ludashi"', 'android:label="SAMP PC"')
 
           block = '''
               <!-- ===== SAMP PC frontend ===== -->
               <activity android:name="com.sampwrap.app.MainActivity"
                         android:exported="true"
-                        android:label="@string/app_name"
+                        android:label="SAMP PC"
                         android:screenOrientation="portrait"
                         android:configChanges="keyboardHidden|orientation|screenSize">
                   <intent-filter>
