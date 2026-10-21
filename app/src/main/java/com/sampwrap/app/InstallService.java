@@ -25,11 +25,14 @@ public class InstallService extends Service {
     public static final String EXTRA_TIER = "tier";
     public static final String EXTRA_URL = "pack_url";
     public static final String EXTRA_MODE = "storage_mode";
+    public static final String EXTRA_PATH = "local_path";
+    public static final String ACTION_LOCAL = "com.sampwrap.app.INSTALL_LOCAL";
     private static final String CHANNEL = "download";
     private static final int NOTIF_ID = 41;
 
     /** URL paket yang dipakai proses ini (dari Intent, bukan prefs). */
     private String packUrl = "";
+    private String localPath = null;
     private volatile boolean running;
     private volatile boolean failed;
     private volatile String failMsg;
@@ -44,6 +47,17 @@ public class InstallService extends Service {
         // jadi service (:sync) tidak boleh mengandalkan prefs milik UI
         i.putExtra(EXTRA_URL, Prefs.effectivePackUrl(ctx));
         i.putExtra(EXTRA_MODE, StorageTarget.currentMode(ctx).name());
+        ctx.startForegroundService(i);
+    }
+
+    /** Pasang dari file yang sudah ada di HP (ZIP atau RAR) — tanpa unduh ulang. */
+    public static void startLocal(Context ctx, String tier, File file) {
+        Intent i = new Intent(ctx, InstallService.class);
+        i.setAction(ACTION_LOCAL);
+        i.putExtra(EXTRA_TIER, tier);
+        i.putExtra(EXTRA_PATH, file.getAbsolutePath());
+        i.putExtra(EXTRA_MODE, StorageTarget.currentMode(ctx).name());
+        i.putExtra(EXTRA_URL, Prefs.effectivePackUrl(ctx));
         ctx.startForegroundService(i);
     }
 
@@ -75,6 +89,7 @@ public class InstallService extends Service {
         if (intent != null) {
             String url = intent.getStringExtra(EXTRA_URL);
             if (url != null) packUrl = url;
+            localPath = intent.getStringExtra(EXTRA_PATH);
             String mode = intent.getStringExtra(EXTRA_MODE);
             if (mode != null) {
                 try { StorageTarget.setMode(this, StorageTarget.Mode.valueOf(mode)); }
@@ -99,8 +114,9 @@ public class InstallService extends Service {
         failed = false;
         ProgressBus.running(this, -1, "Menyiapkan…");
         InstallLog.w(this, "=== mulai tier " + tier + " ===");
-        InstallLog.w(this, "sumber: " + (packUrl == null || packUrl.isEmpty()
-                ? "(per-file) " + AppConfig.packBaseUrl() : packUrl));
+        InstallLog.w(this, "sumber: " + (localPath != null ? "file lokal " + localPath
+                : (packUrl == null || packUrl.isEmpty()
+                ? "(per-file) " + AppConfig.packBaseUrl() : packUrl)));
         Heartbeat hb = new Heartbeat();
         hb.start();
         boolean ok = false;
@@ -108,7 +124,20 @@ public class InstallService extends Service {
             Manifest m = ManifestStore.load(this);
             EnumSet<Manifest.Tag> tags = Manifest.tagsFor(tier);
 
-            // Mode A: satu arsip ZIP (lebih simpel untuk hosting)
+            // Mode lokal: file sudah ada di HP (mis. diunduh lewat browser)
+            if (localPath != null) {
+                File f = new File(localPath);
+                if (!f.isFile() || f.length() < 1024) {
+                    throw new Exception("File tidak ditemukan: " + localPath);
+                }
+                InstallLog.w(this, "file lokal " + f.getName() + " = " + f.length() + " B");
+                installArchive(f, m, tags, tier);
+                f.delete();
+                ok = true;
+                return;
+            }
+
+            // Mode A: satu arsip ZIP/RAR
             if (packUrl != null && !packUrl.isEmpty()) {
                 downloadArchiveAndExtract(m, tags, tier);
                 return;
@@ -202,15 +231,33 @@ public class InstallService extends Service {
         downloadFile(packUrl, arc, "paket",
                 m.totalSize(tags) + 300L * 1024 * 1024);
 
+        // arsip TIDAK dihapus kalau masih gagal — biar bisa diulang tanpa unduh ulang
+        installArchive(arc, m, tags, tier);
+        arc.delete();
+    }
+
+    /**
+     * Pasang dari satu arsip (RAR berlapis atau ZIP) lalu tempel client SA-MP.
+     * Dipakai untuk hasil unduhan maupun file impor dari HP.
+     */
+    private void installArchive(File arc, Manifest m, EnumSet<Manifest.Tag> tags, String tier)
+            throws Exception {
+        File game = GameDir.get(this);
+        File tmp = tmpDir(this);
+        if (!tmp.exists() && !tmp.mkdirs()) throw new Exception("Tidak bisa membuat " + tmp);
+
+        InstallLog.w(this, "arsip: " + arc.getName() + " (" + (arc.length() >> 20) + " MB)"
+                + " rar=" + isRar(arc));
+
         if (isRar(arc)) {
             installRar(arc, m, tags, tmp, game);
         } else {
             postProgress("Mengekstrak ZIP…", -1, 0, false);
+            InstallLog.w(this, "ekstrak ZIP (PackInstaller)");
             com.sampwrap.core.PackInstaller pi =
                     new com.sampwrap.core.PackInstaller(m, tags, null);
             pi.install(arc, game, false);
         }
-        arc.delete();
 
         installClient(tmp, game);
 
@@ -248,7 +295,7 @@ public class InstallService extends Service {
         File inner = biggestRar(tmp);
         if (inner == null) throw new Exception("RAR dalam tidak terbaca");
         InstallLog.w(this, "rar dalam: " + inner.getName() + " (" + (inner.length() >> 20) + " MB)");
-        outer.delete();   // hemat ruang sebelum ekstrak 1,5 GB
+        // luar tidak dihapus di sini: kalau pass 2 gagal, tidak perlu unduh 712 MB lagi
 
         final int[] last = {0};
         String[] wanted = wantedPaths(m, tags);

@@ -38,6 +38,15 @@ public final class DriveDownloader {
     private static final Pattern FORM_INPUT =
             Pattern.compile("<input[^>]*name=\"([^\"]+)\"[^>]*value=\"([^\"]*)\"");
 
+    static {
+        // Google memakai cookie pada alur halaman konfirmasi. Tanpa ini,
+        // permintaan kedua bisa ditolak 403.
+        try {
+            java.net.CookieHandler.setDefault(
+                    new java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ALL));
+        } catch (Throwable ignored) {}
+    }
+
     private DriveDownloader() {}
 
     public static boolean isDrive(String url) {
@@ -80,43 +89,79 @@ public final class DriveDownloader {
                 ? urlOrId : null;
         if (id == null) throw new IOException("Link Drive tidak dikenali: " + urlOrId);
 
-        String base = "https://drive.usercontent.google.com/download";
+        IOException last = null;
+        StringBuilder tried = new StringBuilder();
+        String[] bases = {
+                "https://drive.usercontent.google.com/download",
+                "https://drive.google.com/uc",
+                "https://docs.google.com/uc"
+        };
+        for (String base : bases) {
+            try {
+                HttpURLConnection c = attempt(base, id, start);
+                return c;
+            } catch (IOException e) {
+                if (tried.length() > 0) tried.append(", ");
+                tried.append(hostOf(base)).append("=").append(shortMsg(e));
+                last = e;
+            }
+        }
+        throw new IOException((last == null ? "Drive tidak bisa diakses" : last.getMessage())
+                + "\n\n(endpoint dicoba: " + tried + ")");
+    }
+
+    private static String hostOf(String url) {
+        int a = url.indexOf("//") + 2, b = url.indexOf('/', a);
+        return b > a ? url.substring(a, b) : url.substring(a);
+    }
+
+    private static String shortMsg(Exception e) {
+        String m = e.getMessage() == null ? e.toString() : e.getMessage();
+        int nl = m.indexOf('\n');
+        return nl > 0 ? m.substring(0, nl) : m;
+    }
+
+    /** Satu percobaan ke satu endpoint: langsung file, atau lewat halaman konfirmasi. */
+    private static HttpURLConnection attempt(String base, String id, long start) throws IOException {
         Map<String, String> q = new LinkedHashMap<>();
         q.put("id", id);
         q.put("export", "download");
 
         HttpURLConnection c = get(base + "?" + encode(q), start);
-        String type = String.valueOf(c.getContentType());
-        if (!type.contains("html")) return c;           // sudah file asli
+        if (!String.valueOf(c.getContentType()).contains("html")) return c;
 
-        String formAction = base;
+        // halaman "virus scan warning" -> baca form konfirmasi + uuid
+        String html = readLimited(c);
+        c.disconnect();
+
+        String action = base;
+        Matcher ma = FORM_ACTION.matcher(html);
+        if (ma.find()) action = ma.group(1).replace("&amp;", "&");
+
         Map<String, String> form = new LinkedHashMap<>();
         form.put("id", id);
         form.put("export", "download");
         form.put("confirm", "t");
+        Matcher mi = FORM_INPUT.matcher(html);
+        while (mi.find()) form.put(mi.group(1), mi.group(2).replace("&amp;", "&"));
 
-        Matcher ma = FORM_ACTION.matcher(readLimited(c));
-        if (ma.find()) {
-            formAction = ma.group(1).replace("&amp;", "&");
-        }
-        c.disconnect();
-
-        // form kedua: baca input tersembunyi (uuid dsb.)
-        HttpURLConnection c2 = get(formAction + "?" + encode(form), start);
+        HttpURLConnection c2 = get(action + "?" + encode(form), start);
         if (String.valueOf(c2.getContentType()).contains("html")) {
-            String html = readLimited(c2);
-            Matcher mi = FORM_INPUT.matcher(html);
-            while (mi.find()) form.put(mi.group(1), mi.group(2).replace("&amp;", "&"));
+            String h2 = readLimited(c2);
             c2.disconnect();
-            HttpURLConnection c3 = get(formAction + "?" + encode(form), start);
-            if (String.valueOf(c3.getContentType()).contains("html")) {
-                c3.disconnect();
-                throw new IOException("Drive menolak unduhan (kuota / izin). "
-                        + "Set link jadi 'Anyone with the link' lalu coba lagi.");
-            }
-            return c3;
+            throw new IOException("Drive mengirim halaman, bukan file: " + summarize(h2));
         }
         return c2;
+    }
+
+    /** Ambil inti pesan dari halaman HTML Google (biar user tahu sebabnya). */
+    private static String summarize(String html) {
+        String t = html.replaceAll("(?is)<(script|style)[^>]*>.*?</\\1>", " ")
+                .replaceAll("(?s)<[^>]*>", " ")
+                .replaceAll("&amp;", "&").replaceAll("&quot;", "\"")
+                .replaceAll("\\s+", " ").trim();
+        if (t.length() > 220) t = t.substring(0, 220) + "…";
+        return t.isEmpty() ? "(halaman kosong)" : t;
     }
 
     private static HttpURLConnection get(String url, long start) throws IOException {
@@ -130,8 +175,18 @@ public final class DriveDownloader {
         if (code >= 400) {
             String body = snippet(c);
             c.disconnect();
-            throw new IOException("Drive membalas HTTP " + code
-                    + (body.isEmpty() ? "" : " — " + body));
+            String hint = "";
+            if (code == 403) {
+                hint = " — biasanya kuota file Drive habis (file terlalu sering diunduh). "
+                        + "Tunggu beberapa jam, ganti link paket, atau impor file RAR yang "
+                        + "kamu unduh lewat browser.";
+            } else if (code == 404) {
+                hint = " — file tidak ditemukan / link sudah berubah.";
+            } else if (code == 429) {
+                hint = " — terlalu banyak permintaan, tunggu sebentar.";
+            }
+            throw new IOException("Drive membalas HTTP " + code + hint
+                    + (body.isEmpty() ? "" : "\n(" + body + ")"));
         }
         return c;
     }

@@ -92,7 +92,7 @@ public class MainActivity extends Activity {
                         .title("Gagal memasang paket")
                         .message(pb.text)
                         .neutral("Diagnostik", () -> showDiagnostics())
-                        .negative("Lihat log", () -> showInstallLog())
+                        .negative("Impor file", () -> pickZip(REQ_PACK_ZIP))
                         .positive("Coba lagi", () -> startDownload(lastTier))
                         .show();
             }
@@ -374,7 +374,7 @@ public class MainActivity extends Activity {
 
         packCard.addView(action("Pilih & unduh paket", true, v -> showPackDialog()));
         packCard.addView(UiKit.gap(this, 8));
-        packCard.addView(action("Impor dari file ZIP", false, v -> pickZip(REQ_PACK_ZIP)));
+        packCard.addView(action("Impor dari file (ZIP / RAR)", false, v -> pickZip(REQ_PACK_ZIP)));
         packCard.addView(UiKit.gap(this, 8));
         packCard.addView(action("Lokasi penyimpanan", false, v -> showStorageDialog()));
         packCard.addView(UiKit.gap(this, 8));
@@ -562,7 +562,11 @@ public class MainActivity extends Activity {
     private void pickZip(int requestCode) {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("application/zip");
+        // ZIP maupun RAR (paket Drive bentuknya RAR)
+        i.setType("*/*");
+        i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                "application/zip", "application/x-zip-compressed",
+                "application/vnd.rar", "application/x-rar-compressed", "application/octet-stream"});
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
             startActivityForResult(i, requestCode);
@@ -596,23 +600,26 @@ public class MainActivity extends Activity {
         return out;
     }
 
+    /**
+     * Impor paket dari file di HP (ZIP atau RAR). Dikerjakan oleh service yang
+     * sama dengan unduhan, jadi progress + semua penanganan error ikut.
+     */
     private void importPackFromZip(Uri uri) {
-        Spinner pd = spinner("Mengimpor paket…");
+        Spinner pd = spinner("Menyiapkan file…");
         new Thread(() -> {
             try {
-                File zip = copyToCache(uri, "pack.zip");
-                Manifest m = manifest != null ? manifest : ManifestStore.load(this);
-                EnumSet<Manifest.Tag> tags =
-                        "full".equals(Prefs.pack(this)) ? Manifest.fullTags() : Manifest.liteTags();
-                PackInstaller pi = new PackInstaller(m, tags, null);
-                PackInstaller.Result r = pi.install(zip, GameDir.get(this), false);
+                File f = copyToCache(uri, "import_pack");
                 ui.post(() -> {
                     pd.dismiss();
-                    refreshStorage();
-                    toast("Selesai: " + r);
+                    alertState = ProgressBus.IDLE;
+                    InstallService.startLocal(this, lastTier, f);
+                    ProgressBus.running(this, -1, "Membaca file…");
+                    showProgressCard("Membaca file…", -1);
+                    ui.removeCallbacks(progressPoll);
+                    ui.post(progressPoll);
                 });
             } catch (Exception e) {
-                ui.post(() -> { pd.dismiss(); toast("Gagal impor: " + e.getMessage()); });
+                ui.post(() -> { pd.dismiss(); toast("Gagal menyiapkan file: " + e.getMessage()); });
             }
         }, "import-pack").start();
     }
