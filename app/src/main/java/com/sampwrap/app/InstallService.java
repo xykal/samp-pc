@@ -40,10 +40,29 @@ public class InstallService extends Service {
     }
 
     @Override
+    public void onCreate() {
+        super.onCreate();
+        // proses :sync punya crash handler sendiri, biar errornya kelihatan
+        CrashGuard.install(this);
+    }
+
+    @Override
     public IBinder onBind(Intent intent) { return null; }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        try {
+            return onStartSafe(intent);
+        } catch (Throwable e) {
+            String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+            InstallLog.w(this, "service gagal start: " + msg);
+            postFailed("Service gagal start: " + msg);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+    }
+
+    private int onStartSafe(Intent intent) {
         AppConfig.load(this);
         String tier = intent == null ? Prefs.pack(this) : intent.getStringExtra(EXTRA_TIER);
         if (tier == null) tier = "lite";

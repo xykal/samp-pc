@@ -226,6 +226,11 @@ public class MainActivity extends Activity {
                 }
 
                 sb.append("\n--- LOG TERAKHIR ---\n").append(InstallLog.read(this));
+                String crash = CrashGuard.last(this);
+                if (crash != null) {
+                    sb.append("\n--- CRASH TERAKHIR ---\n")
+                      .append(crash.length() > 1500 ? crash.substring(0, 1500) + "\n…" : crash);
+                }
             } catch (Throwable t) {
                 sb.append("\nDiagnostik error: ").append(t);
             }
