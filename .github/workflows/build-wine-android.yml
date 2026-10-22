@@ -216,7 +216,46 @@ jobs:
           export LIBRARY_PATH="/opt/imagefs/usr/lib"
           export LDFLAGS="-L/opt/imagefs/usr/lib -Wl,-rpath-link,/opt/imagefs/usr/lib -fuse-ld=lld"
           cd build-android
-          make -j"$(nproc)" 2>&1 | tail -60
+          make -j"$(nproc)" > /tmp/build.log 2>&1 || { echo "=== GAGAL, 80 baris terakhir ==="; tail -80 /tmp/build.log; exit 1; }
+          tail -5 /tmp/build.log
+          echo "jumlah error di log: $(grep -c 'error:' /tmp/build.log || true)"
+
+      - name: Program PE inti (wineboot/services/rpcss/...)
+        run: |
+          set -eo pipefail
+          export NDK=$NDK_HOME
+          export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export LIBRARY_PATH="/opt/imagefs/usr/lib"
+          export LDFLAGS="-L/opt/imagefs/usr/lib -Wl,-rpath-link,/opt/imagefs/usr/lib -fuse-ld=lld"
+          cd build-android
+          # Build awal tidak menghasilkan program-program ini (belum jelas kenapa,
+          # kemungkinan target all tidak menyertakan), padahal wine butuh
+          # wineboot.exe/services.exe/rpcss.exe saat boot prefix. Bangun eksplisit.
+          for prg in wineboot services rpcss plugplay conhost winemenubuilder spoolsv wuauserv tabtip termsv getminidump; do
+            make -j"$(nproc)" "programs/$prg/$prg.exe" >> /tmp/progs.log 2>&1 || echo "gagal build $prg"
+          done
+          echo "=== hasil ==="
+          miss=0
+          for prg in wineboot services rpcss; do
+            if [ -f "lib/wine/i386-windows/$prg.exe" ]; then
+              ls -l "lib/wine/i386-windows/$prg.exe"
+            else
+              echo "MASIH HILANG: $prg.exe"; miss=$((miss+1))
+            fi
+          done
+          echo "total exe: $(ls lib/wine/i386-windows/*.exe | wc -l)"
+          tail -20 /tmp/progs.log || true
+          test $miss -eq 0
+
+      - name: Upload log build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            /tmp/build.log
+            /tmp/progs.log
+          if-no-files-found: ignore
 
       - name: Hasil + paketkan
         run: |
