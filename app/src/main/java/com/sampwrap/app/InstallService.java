@@ -437,7 +437,7 @@ public class InstallService extends Service {
                                 new java.net.URL(url).openConnection();
                         c.setConnectTimeout(20000);
                         c.setReadTimeout(45000);
-                        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) SAMP-PC");
+                        com.sampwrap.core.HttpTune.apply(c);
                         if (start > 0) c.setRequestProperty("Range", "bytes=" + start + "-");
                         return c;
                     }
@@ -450,8 +450,7 @@ public class InstallService extends Service {
                         try {
                             c.setConnectTimeout(20000);
                             c.setReadTimeout(20000);
-                            c.setRequestProperty("User-Agent",
-                                    "Mozilla/5.0 (Linux; Android) SAMP-PC");
+                            com.sampwrap.core.HttpTune.apply(c);
                             c.setRequestProperty("Range", "bytes=0-0");
                             int code = com.sampwrap.core.ResumePolicy.status(c);
                             if (code == 206) {

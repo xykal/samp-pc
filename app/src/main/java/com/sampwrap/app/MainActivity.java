@@ -375,9 +375,8 @@ public class MainActivity extends Activity {
                 try {
                     c.setConnectTimeout(12000);
                     c.setReadTimeout(12000);
-                    c.setInstanceFollowRedirects(true);
+                    com.sampwrap.core.HttpTune.apply(c);
                     c.setRequestProperty("Range", "bytes=0-0");
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) SAMP-PC");
                     int code = com.sampwrap.core.ResumePolicy.status(c);
                     String type = String.valueOf(c.getContentType());
                     long total = -1;

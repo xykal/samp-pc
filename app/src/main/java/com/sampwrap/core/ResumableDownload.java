@@ -148,7 +148,24 @@ public final class ResumableDownload {
                 return attemptOnce(dst, source, listener, restartsLeft - 1);
             }
 
+            // 4xx lain saat melanjutkan (GitHub membalas 406 untuk Range yang
+            // lewat dari ukuran, sebagian CDN 400/501) diperlakukan sama seperti
+            // 416: bukan "sudah lengkap", tapi bukan alasan menyerah juga —
+            // buang sisanya, mulai dari nol.
+            if (code >= 400 && code < 500 && have > 0 && code != 401 && code != 403) {
+                log(listener, "server menolak lanjutan (HTTP " + code + ") → buang sisa, mulai dari nol");
+                disconnect(c);
+                c = null;
+                if (restartsLeft <= 0) throw new IOException("server terus menolak (HTTP " + code + ")");
+                if (dst.isFile() && !dst.delete()) throw new IOException("tidak bisa hapus " + dst);
+                return attemptOnce(dst, source, listener, restartsLeft - 1);
+            }
+
             if (code != 200 && code != 206) {
+                if (code == 403) {
+                    throw new IOException("server menolak (HTTP 403) — biasanya kuota Drive habis "
+                            + "atau link tidak publik");
+                }
                 throw new IOException("server membalas HTTP " + code);
             }
             if (type.toLowerCase().contains("html")) {

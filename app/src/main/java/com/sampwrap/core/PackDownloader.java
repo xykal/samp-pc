@@ -104,7 +104,7 @@ public final class PackDownloader {
             HttpURLConnection c = (HttpURLConnection) new URL(e.url).openConnection();
             c.setConnectTimeout(20000);
             c.setReadTimeout(30000);
-            c.setRequestProperty("User-Agent", "sampwrap/1.0");
+            HttpTune.apply(c);
             if (have > 0) c.setRequestProperty("Range", "bytes=" + have + "-");
 
             int code;

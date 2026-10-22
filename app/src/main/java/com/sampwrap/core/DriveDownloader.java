@@ -197,8 +197,7 @@ public final class DriveDownloader {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(20000);
         c.setReadTimeout(30000);
-        c.setInstanceFollowRedirects(true);
-        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) SAMP-PC");
+        HttpTune.apply(c);
         if (start > 0) c.setRequestProperty("Range", "bytes=" + start + "-");
         int code = ResumePolicy.status(c);
         // 416 dibiarkan lolos: header Content-Range-nya justru dipakai untuk
@@ -257,8 +256,7 @@ public final class DriveDownloader {
                     + id + "&export=download&confirm=t").openConnection();
             c.setConnectTimeout(20000);
             c.setReadTimeout(20000);
-            c.setInstanceFollowRedirects(true);
-            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) SAMP-PC");
+            HttpTune.apply(c);
             c.setRequestProperty("Range", "bytes=0-0");
             int code = ResumePolicy.status(c);
             if (code == 206) return ResumePolicy.totalFromContentRange(c.getHeaderField("Content-Range"));
