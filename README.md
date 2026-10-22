@@ -5,7 +5,9 @@ frontend yang menyembunyikan emulator.
 
 ## ⬇️ APK siap pakai
 
-**v1.9.3 (terbaru):** <https://github.com/xykal/samp-pc-download/releases/download/v1.9.3/xverssamp-v1.9.3.apk>
+**v1.9.4 (terbaru):** <https://github.com/xykal/samp-pc-download/releases/download/v1.9.4/xverssamp-v1.9.4.apk>
+**Paket PC Windows (sekali klik):** <https://github.com/xykal/samp-pc-download/releases/download/v1.9.4/XversSamp-PC.zip>
+**v1.9.3:** <https://github.com/xykal/samp-pc-download/releases/download/v1.9.3/xverssamp-v1.9.3.apk>
 **Paket data (mirror sendiri, 712.800.749 B):** <https://github.com/xykal/samp-pc-download/releases/download/data-v1/xverssamp-data-pack-full.rar>
 v1.9.1: <https://github.com/xykal/samp-pc-download/releases/download/v1.9.1/xverssamp-v1.9.1.apk>
 v1.8.1 (layer Wine stock, pembanding kalau v1.9.0 gagal start): <https://github.com/xykal/samp-pc-download/releases/download/v1.8.1/xverssamp-v1.8.1-merged.apk>

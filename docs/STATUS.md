@@ -380,3 +380,15 @@ Keluhan: "data nya aja gada di drive" + "error trus" + "pas didiagnosa juga erro
 - Diagnostik ditulis ulang (tiap bagian try/catch, log di awal, bisa digulir,
   Salin/Simpan). Penyebab "diagnostik malah error" = satu try/catch besar.
 - Bug baru: header Accept bawaan bikin GitHub balas 406 → `core/HttpTune`.
+
+## 19. v1.9.4 — MEmu (x86) vs engine ARM64 (2026-10-22)
+
+- APK diperiksa: 25 lib, semuanya `lib/arm64-v8a`; `lib/x86_64` = 0.
+  Winlator butuh ARM64, MEmu x86_64 → game tidak mungkin start.
+- Sandbox uji: x86_64 tanpa KVM, 1 GB RAM → emulator Android tidak bisa
+  dijalankan di sini. Diuji: isi APK, kompilasi seluruh Java app, dan kode
+  ekstraksi C++ yang sama dengan APK (412 file / 4,66 GB).
+- Ditambah: peringatan non-ARM64 saat app dibuka.
+- Paket PC: `XversSamp-PC.zip` (PASANG.bat + unrar.exe build sendiri).
+  unrar.exe diuji di Wine: baca 52 entri, ekstrak RAR dalam 612.599.927 B,
+  decode gta_sa.exe 14.383.616 B (metode RAR 7).
