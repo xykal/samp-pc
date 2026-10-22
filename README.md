@@ -5,7 +5,6 @@ frontend yang menyembunyikan emulator.
 
 ## ⬇️ APK siap pakai
 
-**APK gabungan v1.9.2 (XversSamp, engine Wine 10.17 build sendiri):** <https://github.com/xykal/samp-pc-download/releases/download/v1.9.2/xverssamp-v1.9.2.apk>  (460 MB)
 v1.9.1: <https://github.com/xykal/samp-pc-download/releases/download/v1.9.1/xverssamp-v1.9.1.apk>
 v1.8.1 (layer Wine stock, pembanding kalau v1.9.0 gagal start): <https://github.com/xykal/samp-pc-download/releases/download/v1.8.1/xverssamp-v1.8.1-merged.apk>
 v1.8.0: <https://github.com/xykal/samp-pc-download/releases/download/v1.8.0/xverssamp-v1.8.0-merged.apk>
@@ -155,3 +154,6 @@ perangkat itu client native mobile / streaming masih jawaban yang benar.
 - Fork Winlator = LGPL/GPL → source hasil gabungan wajib dipublikasi.
 - Jangan bundle file GTA:SA ke dalam APK yang kamu sebar.
 - Paket data yang kamu hosting adalah tanggung jawabmu (gunakan salinan yang kamu miliki).
+
+**APK gabungan v1.9.3 (XversSamp, engine Wine 10.17 build sendiri):** <https://github.com/xykal/samp-pc-download/releases/download/v1.9.3/xverssamp-v1.9.3.apk>  (460 MB)
+**Paket data (mirror sendiri, 712.800.749 B):** <https://github.com/xykal/samp-pc-download/releases/download/data-v1/xverssamp-data-pack-full.rar>
