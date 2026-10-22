@@ -128,6 +128,7 @@ public class MainActivity extends Activity {
         scanDevice();
         loadManifest();
         showLastCrashIfAny();
+        warnIfNotArm64();
         ui.post(progressPoll);
     }
 
@@ -137,6 +138,32 @@ public class MainActivity extends Activity {
         if (manifest != null) refreshStorage();
         ui.removeCallbacks(progressPoll);
         ui.post(progressPoll);
+    }
+
+    /**
+     * Emulator Android di PC (MEmu, LDPlayer, BlueStacks) itu x86_64, sedangkan
+     * engine Wine di APK ini ARM64. Hasilnya: app jalan, data bisa diunduh,
+     * tapi game-nya tidak akan pernah start — dan gejalanya cuma "berhenti
+     * sendiri". Lebih baik dikatakan di depan daripada user menebak-nebak.
+     */
+    private void warnIfNotArm64() {
+        boolean arm64 = false;
+        for (String abi : android.os.Build.SUPPORTED_ABIS) {
+            if (abi != null && abi.startsWith("arm64")) { arm64 = true; break; }
+        }
+        if (arm64) return;
+        new UiDialog.Alert(this)
+                .title("Perangkat ini bukan ARM64")
+                .message("\nABI terdeteksi: " + android.text.TextUtils.join(", ",
+                        android.os.Build.SUPPORTED_ABIS)
+                        + "\n\nEngine Wine di app ini cuma ada versi ARM64 (HP Android biasa). "
+                        + "Di emulator x86 seperti MEmu / LDPlayer / BlueStacks, game tidak bisa "
+                        + "dijalankan — bukan karena unduhan atau data.\n\n"
+                        + "Kalau lu main di PC, pakai paket PC-nya (XversSamp untuk Windows): "
+                        + "satu klik pasang, langsung jalan tanpa emulator.\n\n"
+                        + "Kalau ini HP beneran dan pesannya salah, kirim Diagnostik ke developer.")
+                .positive("Mengerti", null)
+                .show();
     }
 
     /** Tampilkan crash terakhir (kalau ada) supaya kelihatan penyebabnya. */

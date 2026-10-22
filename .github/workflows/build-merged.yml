@@ -161,8 +161,8 @@ jobs:
           import re, pathlib
           f = pathlib.Path('winlator/app/build.gradle')
           s = f.read_text()
-          s = re.sub(r'versionCode\s+\d+', 'versionCode 193', s)
-          s = re.sub(r'versionName\s+"[^"]*"', 'versionName "1.9.3"', s)
+          s = re.sub(r'versionCode\s+\d+', 'versionCode 194', s)
+          s = re.sub(r'versionName\s+"[^"]*"', 'versionName "1.9.4"', s)
           f.write_text(s)
           for line in s.splitlines():
               if 'versionCode' in line or 'versionName' in line:
