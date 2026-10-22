@@ -14,14 +14,14 @@ Yang belum: menjalankannya di HP ARM64 (sandbox kerja saya x86 tanpa Android).
 | Target unix | `aarch64-linux-android28` (bionic) |
 | PE 32-bit | `i686-w64-mingw32-gcc` (gcc-mingw, **bukan** llvm-mingw) |
 | Grafis | `winex11.drv` (bukan `wineandroid.drv`) |
-| Layer jadi | `wine-10.17-bionic-arm64.tar.zst` — **32.514.687 B (31,0 MiB)** |
-| sha256 | `efd533ee3048c2d7b34ae4fd594e565d4a26032d8ee1aa6d5492da59f1c1afe1` |
-| Isi | `bin/` 15 file, `lib/wine/i386-windows` 595 PE, `lib/wine/aarch64-unix` 28 .so, `share/wine` (nls, fonts, wine.inf) |
+| Layer jadi | `wine-10.17-bionic-arm64-v2.tar.zst` — **32.794.360 B (31,3 MiB)** |
+| sha256 | `2ab2c2d20357a9bbebe07a2ac6e2608db233f8f3982b0f70fbf94a43ac74ecb6` |
+| Isi | `bin/` 15 file, `lib/wine/i386-windows` **595 DLL + 109 EXE**, `lib/wine/aarch64-unix` 28 .so, `share/wine` (nls, fonts, wine.inf) |
 | Uncompressed | 164 MB |
 | Layer bawaan sebagai pembanding | `proton-9.0-arm64ec.tar.zst` 73.570.637 B (70,2 MiB), 515 MB isi |
 | Workflow | `.github/workflows/build-wine-android.yml` (ID 392212432) |
-| Run sukses | 39701770654 (build) → artefak `wine-bionic-arm64` |
-| APK | v1.9.0, 459.859.571 B, sha256 `5630bdb6…588b11` |
+| Run sukses | 39701770654 (build v1) → 39709077273 (build v2, program inti lengkap) |
+| APK | v1.9.1, 460.142.079 B, sha256 `a5966ba3…d5a4` |
 
 Bukti tipe file (dari log CI):
 
@@ -101,6 +101,9 @@ with_x=yes enable_wineandroid_drv=no with_freetype=no with_fontconfig=no with_vu
   --with-wine-tools=../tools-build \
   --enable-archs=i386 --with-mingw=i686-w64-mingw32 \
   --with-x --x-includes=/opt/xinc --x-libraries=/opt/imagefs/usr/lib \
+  --enable-conhost=i386 --enable-plugplay=i386 --enable-rpcss=i386 \
+  --enable-services=i386 --enable-spoolsv=i386 --enable-termsv=i386 \
+  --enable-wineboot=i386 --enable-winemenubuilder=i386 --enable-wuauserv=i386 \
   --disable-tests --disable-win16
 ```
 
@@ -148,6 +151,7 @@ Tar + `zstd -19` → **31,0 MiB**.
 | `ld.lld: unable to find -lX11` | (a) `-L` hilang karena tiap step shell baru, (b) symlink imagefs tidak diekstrak | `-L` + `LIBRARY_PATH` di step compile **dan** ekstrak symlink |
 | `XF86VidModeSetGamma undeclared` | xorgproto hanya punya `xXF86VidMode*` | `libxxf86vm-dev libxxf86dga-dev libxv-dev` |
 | Build sukses tapi `ls bin` gagal | install ke `<prefix>/arm64-v8a/bin` | path ABI diperhitungkan di step paket |
+| `wineboot.exe`, `services.exe`, `rpcss.exe`, `conhost.exe`, dst tidak dibangun | `configure.ac`: `enable_<program>` default `$HOST_ARCH` (aarch64); PE arch kita cuma i386 → **tidak ada rule** | `--enable-<program>=i386` untuk kesembilannya |
 | Layer kita ditimpa stock di APK | `app/build.gradle` fork punya task `downloadProton` yang validasi size+sha stock | timpa `protonURL/protonSHA256/protonSize` ke milik kita di build workflow |
 
 ---

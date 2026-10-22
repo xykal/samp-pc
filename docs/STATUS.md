@@ -329,8 +329,8 @@ Ringkas hasil lanjutan dari §15:
 |---|---|
 | Workflow bionic `build-wine-android.yml` (ID 392212432) | ✅ run 39701770654 sukses |
 | Wine 10.17, host `aarch64-linux-android28`, PE i386, `winex11.drv` | ✅ |
-| Artefak layer | 32.514.687 B (31,0 MiB), sha256 `efd533ee…c1afe1` |
-| APK v1.9.0 | 459.859.571 B (turun 40,9 MB dari v1.8.1) |
+| Artefak layer | v2 32.794.360 B (31,3 MiB), sha256 `2ab2c2d2…ecb6` (v1 tanpa program inti: 32.514.687 B) |
+| APK v1.9.1 | 460.142.079 B (turun 40,7 MB dari v1.8.1) |
 | Aset di APK | `imagefs.tar.zst` 193.425.249 B (tetap) + `proton-9.0-arm64ec.tar.zst` = **layer kita** 32.514.687 B |
 | Verifikasi | ELF ARM64 bionic (`linker64`), PE i386, isi `bin/lib/share` lengkap, APK signed, nama app XversSamp, `libsampunrar.so` ada |
 | Uji di HP ARM64 | ❌ belum — tidak ada perangkat di sandbox |
@@ -343,3 +343,11 @@ menghapus layer kita dan mengunduh stock.
 
 Konsekuensi: layer Wine bawaan (70,2 MB) tidak dipakai lagi; kalau runtime gagal,
 v1.8.1 tetap tersedia sebagai pembanding.
+
+### Koreksi v1.9.0 → v1.9.1
+
+v1.9.0 kehilangan 14 program PE karena `configure.ac` meng-default
+`enable_{conhost,plugplay,rpcss,services,spoolsv,termsv,wineboot,winemenubuilder,wuauserv}`
+ke `$HOST_ARCH` (aarch64) sedangkan PE yang dibangun hanya i386. Setelah
+`--enable-<program>=i386`, jumlah EXE naik 100 → 109 dan `wineboot.exe`,
+`services.exe`, `rpcss.exe` ada. v1.9.0 ditandai *prerelease* dan digantikan v1.9.1.

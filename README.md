@@ -5,7 +5,7 @@ frontend yang menyembunyikan emulator.
 
 ## ⬇️ APK siap pakai
 
-**APK gabungan v1.9.0 (XversSamp, engine Wine 10.17 build sendiri):** <https://github.com/xykal/samp-pc-download/releases/download/v1.9.0/xverssamp-v1.9.0.apk>  (459 MB)
+**APK gabungan v1.9.1 (XversSamp, engine Wine 10.17 build sendiri):** <https://github.com/xykal/samp-pc-download/releases/download/v1.9.1/xverssamp-v1.9.1.apk>  (460 MB)
 v1.8.1 (layer Wine stock, pembanding kalau v1.9.0 gagal start): <https://github.com/xykal/samp-pc-download/releases/download/v1.8.1/xverssamp-v1.8.1-merged.apk>
 v1.8.0: <https://github.com/xykal/samp-pc-download/releases/download/v1.8.0/xverssamp-v1.8.0-merged.apk>
 v1.7.0: <https://github.com/xykal/samp-pc-download/releases/download/v1.7.0/xverssamp-v1.7.0-merged.apk>
