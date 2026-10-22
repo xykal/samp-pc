@@ -367,3 +367,16 @@ Ditambah: `ResumePolicy`, `ResumableDownload`, cek magic `Rar!`/`PK`,
 
 Uji nyata: file +1 byte → probe → ulang dari 0 → `Rar!`; file pas → selesai
 tanpa unduh; resume 1 MB → 206 nyambung. APK v1.9.2 460.149.903 B.
+
+## 18. v1.9.3 — sumber data pindah ke cermin sendiri (2026-10-22)
+
+Keluhan: "data nya aja gada di drive" + "error trus" + "pas didiagnosa juga error".
+
+- Paket data di-host sendiri di GitHub Releases (`data-v1`, 712.800.749 B,
+  sha256 cd2f8524…), Drive jadi cermin otomatis. Terukur 19 MB/dtk, Range benar,
+  416 membawa `content-range: bytes */712800749`.
+- Dibuktikan isinya benar: kode ekstraksi yang sama dengan APK → 412 file,
+  5.001.095.504 B, gta_sa.exe 14 MB.
+- Diagnostik ditulis ulang (tiap bagian try/catch, log di awal, bisa digulir,
+  Salin/Simpan). Penyebab "diagnostik malah error" = satu try/catch besar.
+- Bug baru: header Accept bawaan bikin GitHub balas 406 → `core/HttpTune`.

@@ -182,7 +182,7 @@ public class MainActivity extends Activity {
     /** Kalau file Drive kena limit kuota: user bisa tempel link salinannya sendiri. */
     private void showPackLinkDialog() {
         UiDialog.input(this, "Ganti link paket",
-                "Tempel link Google Drive (atau kosongkan untuk kembali ke bawaan)",
+                "Tempel link Drive atau URL .rar/.zip (kosongkan untuk kembali ke bawaan)",
                 Prefs.packUrl(this), val -> {
                     String v = val.trim();
                     if (v.isEmpty()) {
@@ -190,8 +190,10 @@ public class MainActivity extends Activity {
                         toast("Kembali ke link bawaan");
                         return;
                     }
-                    if (com.sampwrap.core.DriveDownloader.fileId(v) == null) {
-                        toast("Link Drive tidak dikenali");
+                    // Terima link Drive maupun URL langsung (GitHub/CDN lain).
+                    if (com.sampwrap.core.DriveDownloader.fileId(v) == null
+                            && !v.startsWith("http://") && !v.startsWith("https://")) {
+                        toast("Link tidak dikenali (harus http/https atau link Drive)");
                         return;
                     }
                     Prefs.setPackUrl(this, v);
