@@ -347,7 +347,9 @@ public class MainActivity extends Activity {
 
     /** Sisa file sementara yang bikin resume kacau. */
     private String leftoverText() {
-        File tmp = new File(GameDir.get(this).getParentFile(), ".tmp");
+        File game = GameDir.get(this);
+        File parent = game.getParentFile();
+        File tmp = new File(parent == null ? game : parent, ".tmp");
         StringBuilder sb = new StringBuilder();
         File[] fs = tmp.listFiles();
         if (fs == null || fs.length == 0) return "tidak ada file sementara";
@@ -405,7 +407,9 @@ public class MainActivity extends Activity {
 
     private void saveReport(String report) {
         try {
-            File f = new File(GameDir.get(this).getParentFile(), "diagnostik.txt");
+            File game = GameDir.get(this);
+            File parent = game.getParentFile();
+            File f = new File(parent == null ? game : parent, "diagnostik.txt");
             try (java.io.FileOutputStream out = new java.io.FileOutputStream(f)) {
                 out.write(report.getBytes("UTF-8"));
             }

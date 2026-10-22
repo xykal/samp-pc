@@ -272,6 +272,14 @@ public class InstallService extends Service {
             throw new Exception("Selesai mengekstrak (" + (size >> 20) + " MB) tapi samp.exe "
                     + "tidak ada. Isi folder: " + topLevel(game));
         }
+        // pagar kedua: samp.exe bisa datang dari client.zip, jadi dia ADA walaupun
+        // data GTA-nya gagal diekstrak. Ini yang bikin game "jalan" lalu mati.
+        if (!new File(game, "gta_sa.exe").isFile()) {
+            throw new Exception("Data GTA tidak ada (gta_sa.exe tidak ditemukan) walaupun "
+                    + "client SA-MP sudah terpasang. Ukuran folder " + (size >> 20) + " MB. "
+                    + "Isi folder: " + topLevel(game) + " — coba pasang ulang; kalau tetap "
+                    + "sama, kirim Diagnostik.");
+        }
         postProgress("Selesai — game siap dijalankan", 100, 100, true);
     }
 
