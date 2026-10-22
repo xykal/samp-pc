@@ -54,7 +54,8 @@ jobs:
             gcc-mingw-w64-i686 g++-mingw-w64-i686 binutils-mingw-w64-i686 \
             xz-utils zstd curl unzip file \
             libx11-dev libxext-dev libxrender-dev libxrandr-dev libxfixes-dev \
-            libxcursor-dev libxi-dev libxcomposite-dev libxinerama-dev libxcb1-dev
+            libxcursor-dev libxi-dev libxcomposite-dev libxinerama-dev libxcb1-dev \
+            libxxf86vm-dev libxxf86dga-dev libxv-dev
           i686-w64-mingw32-gcc --version | head -1
 
       - name: Android NDK
@@ -174,6 +175,7 @@ jobs:
           export ac_cv_lib_soname_XI=libXi.so.6
           export ac_cv_lib_soname_XINERAMA=libXinerama.so.1
           export ac_cv_lib_soname_X11_XCB=libX11-xcb.so.1
+          export ac_cv_lib_soname_Xxf86vm=libXxf86vm.so.1
 
           # configure kadang mengabaikan --without-* saat cross; paksa lewat env
           with_x=yes enable_wineandroid_drv=no with_freetype=no with_fontconfig=no with_vulkan=no \
