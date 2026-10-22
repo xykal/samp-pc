@@ -128,6 +128,9 @@ public final class DriveDownloader {
         q.put("export", "download");
 
         HttpURLConnection c = get(base + "?" + encode(q), start);
+        // 416 = range tidak masuk akal. JANGAN dianggap error di sini: yang
+        // memutuskan "mulai dari nol" adalah ResumableDownload/ResumePolicy.
+        if (c.getResponseCode() == 416) return c;
         if (!String.valueOf(c.getContentType()).contains("html")) return c;
 
         // halaman "virus scan warning" -> baca form konfirmasi + uuid
@@ -172,7 +175,9 @@ public final class DriveDownloader {
         c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) SAMP-PC");
         if (start > 0) c.setRequestProperty("Range", "bytes=" + start + "-");
         int code = c.getResponseCode();
-        if (code >= 400) {
+        // 416 dibiarkan lolos: header Content-Range-nya justru dipakai untuk
+        // memutuskan apakah file lokal sudah lengkap atau harus diulang dari 0.
+        if (code >= 400 && code != 416) {
             String body = snippet(c);
             c.disconnect();
             String hint = "";

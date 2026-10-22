@@ -390,6 +390,14 @@ jobs:
               print('app_name ditambahkan')
           PY
 
+      - name: Unit test core (resume/416/HTML)
+        run: |
+          mkdir -p out
+          javac -encoding UTF-8 -d out $(find samp/app/src/main/java/com/sampwrap/core -name '*.java') \
+                samp/app/src/test/java/CoreTest.java samp/app/src/test/java/DownloadTest.java
+          java -Dfile.encoding=UTF-8 -cp out CoreTest
+          java -Dfile.encoding=UTF-8 -cp out DownloadTest
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:

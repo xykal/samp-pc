@@ -389,94 +389,83 @@ public class InstallService extends Service {
     }
 
     /**
-     * Unduh dengan resume (HTTP Range), retry, dan log.
+     * Unduh satu file besar: resume (HTTP Range), retry, dan pemulihan 416.
      *
-     * Kenapa begini: unduhan 712 MB di jaringan HP putus-nyambung. Tanpa retry
-     * + resume, satu timeout = "gagal mengunduh" dan user harus mulai dari nol.
+     * Logika range-nya ada di com.sampwrap.core.ResumableDownload (murni Java,
+     * ada test-nya di PC). Yang penting di sini:
+     *   - 416 TIDAK dianggap "sudah lengkap" (itu bug lama: file sementara
+     *     yang lebih besar dari file asli bikin 416, lalu ekstraksi gagal);
+     *   - hasil unduhan dicek magic-nya (RAR!/PK). Kalau ternyata bukan arsip,
+     *     file dibuang dan diunduh ulang dari nol — bukan diteruskan ke ekstraktor.
      */
-    private void downloadFile(String url, File dst, String label, long extraNeeded) throws Exception {
-        final int MAX = 6;
-        Exception last = null;
+    private void downloadFile(final String url, final File dst, final String label,
+                              long extraNeeded) throws Exception {
+        final boolean drive = com.sampwrap.core.DriveDownloader.isDrive(url);
 
-        for (int attempt = 1; attempt <= MAX; attempt++) {
-            long have = dst.isFile() ? dst.length() : 0;
-            java.net.HttpURLConnection c = null;
-            try {
-                InstallLog.w(this, "unduh " + label + " #" + attempt + " mulai byte " + have);
-                if (com.sampwrap.core.DriveDownloader.isDrive(url)) {
-                    c = com.sampwrap.core.DriveDownloader.open(url, have);
-                } else {
-                    c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-                    c.setConnectTimeout(20000);
-                    c.setReadTimeout(45000);
-                    if (have > 0) c.setRequestProperty("Range", "bytes=" + have + "-");
-                }
+        com.sampwrap.core.ResumableDownload.Source src =
+                new com.sampwrap.core.ResumableDownload.Source() {
+                    @Override public java.net.HttpURLConnection open(long start)
+                            throws java.io.IOException {
+                        if (drive) return com.sampwrap.core.DriveDownloader.open(url, start);
+                        java.net.HttpURLConnection c = (java.net.HttpURLConnection)
+                                new java.net.URL(url).openConnection();
+                        c.setConnectTimeout(20000);
+                        c.setReadTimeout(45000);
+                        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) SAMP-PC");
+                        if (start > 0) c.setRequestProperty("Range", "bytes=" + start + "-");
+                        return c;
+                    }
+                };
 
-                int code = c.getResponseCode();
-                String type = String.valueOf(c.getContentType());
-                long len = c.getContentLengthLong();
-                InstallLog.w(this, "  HTTP " + code + " tipe=" + type + " panjang=" + len);
+        com.sampwrap.core.ResumableDownload.Listener listener =
+                new com.sampwrap.core.ResumableDownload.Listener() {
+                    @Override public void onLog(String msg) {
+                        InstallLog.w(InstallService.this, "  " + msg);
+                    }
 
-                if (code == 416) { InstallLog.w(this, "  sudah lengkap (416)"); return; }
-                if (code != 200 && code != 206) throw new Exception("server membalas HTTP " + code);
-                if (type.contains("html")) {
-                    throw new Exception("server kirim halaman HTML, bukan file "
-                            + "(biasanya kuota Drive habis atau link tidak publik)");
-                }
-
-                long total = code == 206 ? have + len : len;
-                boolean append = code == 206 && have > 0;
-                if (!append) have = 0;
-
-                // ruang dicek setelah ukuran sebenarnya ketahuan
-                String space = StorageTarget.checkSpace(dst.getParentFile(),
-                        Math.max(0, total - have) + extraNeeded);
-                if (space != null) throw new Exception(space.replace('\n', ' '));
-
-                postProgress("Mengunduh " + label + "…", -1, 0, false);
-
-                try (java.io.InputStream in = new java.io.BufferedInputStream(c.getInputStream(), 128 * 1024);
-                     java.io.FileOutputStream fos = new java.io.FileOutputStream(dst, append)) {
-                    byte[] buf = new byte[128 * 1024];
-                    long done = have;
-                    int n;
-                    while ((n = in.read(buf)) > 0) {
-                        fos.write(buf, 0, n);
-                        done += n;
+                    @Override public void onProgress(long done, long total) {
                         if (total > 0) {
                             postProgress("Mengunduh " + label + " " + (100 * done / total) + "%  ("
-                                    + (done >> 20) + "/" + (total >> 20) + " MB)",
+                                            + (done >> 20) + "/" + (total >> 20) + " MB)",
                                     (int) (done >> 20), (int) (total >> 20), false);
                         } else {
                             postProgress("Mengunduh " + label + "  (" + (done >> 20) + " MB)",
                                     -1, 0, false);
                         }
                     }
-                }
+                };
 
-                long got = dst.isFile() ? dst.length() : 0;
-                if (total > 0 && got < total) {
-                    throw new Exception("koneksi terputus di " + (got >> 20) + "/" + (total >> 20) + " MB");
-                }
-                InstallLog.w(this, "  selesai " + got + " byte");
-                return;
-            } catch (Exception e) {
-                last = e;
-                String m = e.getMessage() == null ? e.toString() : e.getMessage();
-                InstallLog.w(this, "  gagal: " + m);
-                if (attempt < MAX) {
-                    int wait = Math.min(15, attempt * 2);
-                    postProgress("Gagal (" + m + ") — coba lagi " + attempt + "/" + (MAX - 1)
-                            + " dalam " + wait + " dtk…", -1, 0, false);
-                    try { Thread.sleep(wait * 1000L); } catch (InterruptedException ie) { return; }
-                }
-            } finally {
-                if (c != null) c.disconnect();
+        InstallLog.w(this, "unduh " + label + " (" + (drive ? "Drive" : "URL") + ") -> " + dst);
+        com.sampwrap.core.ResumableDownload.fetch(dst, src, 6, listener);
+
+        if (!looksLikeArchive(dst)) {
+            InstallLog.w(this, "isi bukan arsip (magic salah) -> buang, ulang dari nol");
+            long bad = dst.length();
+            if (!dst.delete()) throw new Exception("File hasil unduhan rusak dan tidak bisa dihapus: " + dst);
+            postProgress("File hasil unduhan rusak (" + (bad >> 20) + " MB) — ulang dari nol…",
+                    -1, 0, false);
+            com.sampwrap.core.ResumableDownload.fetch(dst, src, 6, listener);
+            if (!looksLikeArchive(dst)) {
+                throw new Exception("Unduhan selesai (" + (dst.length() >> 20) + " MB) tapi isinya "
+                        + "bukan arsip RAR/ZIP. Biasanya Drive mengirim halaman lain (kuota) — "
+                        + "coba lagi nanti atau impor file RAR manual.");
             }
         }
+        InstallLog.w(this, "  selesai " + dst.length() + " byte");
+    }
 
-        String m = last == null || last.getMessage() == null ? "tidak diketahui" : last.getMessage();
-        throw new Exception("Unduhan gagal setelah " + MAX + " percobaan. Terakhir: " + m);
+    /** RAR ("Rar!") atau ZIP ("PK\x03\x04") — dua format paket yang didukung. */
+    private static boolean looksLikeArchive(File f) {
+        try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+            byte[] b = new byte[8];
+            int n = in.read(b);
+            if (n < 4) return false;
+            if (b[0] == 'R' && b[1] == 'a' && b[2] == 'r' && b[3] == '!') return true;
+            return b[0] == 'P' && b[1] == 'K'
+                    && (b[2] == 3 || b[2] == 5 || b[2] == 7);
+        } catch (java.io.IOException e) {
+            return false;
+        }
     }
 
     /** Unzip sederhana + proteksi zip-slip. */

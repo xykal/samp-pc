@@ -89,71 +89,112 @@ public final class PackDownloader {
             throw new IOException("tidak bisa buat folder " + parent);
         }
         File part = new File(out.getAbsolutePath() + ".part");
-        long have = part.exists() ? part.length() : 0;
-        boolean resumed = have > 0;
 
-        HttpURLConnection c = (HttpURLConnection) new URL(e.url).openConnection();
-        c.setConnectTimeout(20000);
-        c.setReadTimeout(30000);
-        c.setRequestProperty("User-Agent", "sampwrap/1.0");
-        if (have > 0) c.setRequestProperty("Range", "bytes=" + have + "-");
-
-        int code = c.getResponseCode();
-        boolean append;
-        if (code == HttpURLConnection.HTTP_PARTIAL && have > 0) {
-            append = true;
-        } else if (code == HttpURLConnection.HTTP_OK) {
-            append = false;
-            have = 0;
-            resumed = false;
-        } else {
-            c.disconnect();
-            throw new IOException("HTTP " + code + " untuk " + e.path);
+        // Sisa sesi lama yang ternyata halaman HTML bukan potongan file.
+        if (part.isFile() && ResumableDownload.looksLikeHtml(part)) {
+            if (!part.delete()) throw new IOException("tidak bisa hapus " + part);
         }
 
-        long total = e.size > 0 ? e.size : c.getContentLengthLong() + have;
-        long done = have;
+        // 416 / Content-Range tidak cocok: buang .part lalu ulang sekali dari nol.
+        for (int attempt = 0; ; attempt++) {
+            boolean last = attempt >= 1;
+            long have = part.exists() ? part.length() : 0;
+            boolean resumed = have > 0;
 
-        try (InputStream in = new BufferedInputStream(c.getInputStream(), BUFFER);
-             FileOutputStream fos = new FileOutputStream(part, append)) {
-            byte[] buf = new byte[BUFFER];
-            int n;
-            long lastNotify = 0;
-            while ((n = in.read(buf)) > 0) {
-                if (cancelled) throw new IOException("dibatalkan");
-                fos.write(buf, 0, n);
-                done += n;
-                long now = System.currentTimeMillis();
-                if (listener != null && (now - lastNotify > 250 || done == total)) {
-                    listener.onProgress(e.path, done, total);
-                    lastNotify = now;
+            HttpURLConnection c = (HttpURLConnection) new URL(e.url).openConnection();
+            c.setConnectTimeout(20000);
+            c.setReadTimeout(30000);
+            c.setRequestProperty("User-Agent", "sampwrap/1.0");
+            if (have > 0) c.setRequestProperty("Range", "bytes=" + have + "-");
+
+            int code;
+            String cr;
+            long len;
+            try {
+                code = c.getResponseCode();
+                cr = c.getHeaderField("Content-Range");
+                len = c.getContentLengthLong();
+            } catch (IOException ex) {
+                c.disconnect();
+                throw ex;
+            }
+
+            ResumePolicy.Action action = ResumePolicy.decide(have, code, cr, len);
+
+            if (action == ResumePolicy.Action.COMPLETE) {
+                c.disconnect();
+                if (out.exists() && !out.delete()) throw new IOException("tidak bisa hapus " + out);
+                if (!part.renameTo(out)) throw new IOException("gagal rename " + part);
+                return true;
+            }
+
+            boolean needReopen = (code == 416)
+                    || (code == 206 && have > 0
+                        && ResumePolicy.startFromContentRange(cr) >= 0
+                        && ResumePolicy.startFromContentRange(cr) != have);
+
+            if (needReopen) {
+                c.disconnect();
+                if (last) throw new IOException("server menolak resume (HTTP " + code + ") untuk " + e.path);
+                if (part.exists() && !part.delete()) throw new IOException("tidak bisa hapus " + part);
+                continue;   // ulang dari byte 0
+            }
+
+            if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) {
+                c.disconnect();
+                throw new IOException("HTTP " + code + " untuk " + e.path);
+            }
+
+            boolean append = code == HttpURLConnection.HTTP_PARTIAL && have > 0;
+            if (!append) {
+                have = 0;
+                resumed = false;
+            }
+
+            long total = e.size > 0 ? e.size : c.getContentLengthLong() + have;
+            long done = have;
+
+            try (InputStream in = new BufferedInputStream(c.getInputStream(), BUFFER);
+                 FileOutputStream fos = new FileOutputStream(part, append)) {
+                byte[] buf = new byte[BUFFER];
+                int n;
+                long lastNotify = 0;
+                while ((n = in.read(buf)) > 0) {
+                    if (cancelled) throw new IOException("dibatalkan");
+                    fos.write(buf, 0, n);
+                    done += n;
+                    long now = System.currentTimeMillis();
+                    if (listener != null && (now - lastNotify > 250 || done == total)) {
+                        listener.onProgress(e.path, done, total);
+                        lastNotify = now;
+                    }
+                }
+            } finally {
+                c.disconnect();
+            }
+
+            if (e.size > 0 && part.length() != e.size) {
+                throw new IOException("ukuran tidak cocok: " + e.path
+                        + " (" + part.length() + " != " + e.size + ")");
+            }
+
+            if (e.sha256 != null && !e.sha256.equals("-") && !e.sha256.isEmpty()) {
+                final String actual;
+                try {
+                    actual = PackInstaller.sha256(part);
+                } catch (Exception ex) {
+                    throw new IOException("gagal hitung sha256: " + e.path, ex);
+                }
+                if (!actual.equalsIgnoreCase(e.sha256)) {
+                    throw new IOException("sha256 tidak cocok: " + e.path);
                 }
             }
-        } finally {
-            c.disconnect();
-        }
 
-        if (e.size > 0 && part.length() != e.size) {
-            throw new IOException("ukuran tidak cocok: " + e.path
-                    + " (" + part.length() + " != " + e.size + ")");
+            // rename atomik
+            if (out.exists() && !out.delete()) throw new IOException("tidak bisa hapus " + out);
+            if (!part.renameTo(out)) throw new IOException("gagal rename " + part);
+            return resumed;
         }
-
-        if (e.sha256 != null && !e.sha256.equals("-") && !e.sha256.isEmpty()) {
-            final String actual;
-            try {
-                actual = PackInstaller.sha256(part);
-            } catch (Exception ex) {
-                throw new IOException("gagal hitung sha256: " + e.path, ex);
-            }
-            if (!actual.equalsIgnoreCase(e.sha256)) {
-                throw new IOException("sha256 tidak cocok: " + e.path);
-            }
-        }
-
-        // rename atomik
-        if (out.exists() && !out.delete()) throw new IOException("tidak bisa hapus " + out);
-        if (!part.renameTo(out)) throw new IOException("gagal rename " + part);
-        return resumed;
     }
 
     /** Hapus file yang tidak termasuk plan (dipakai saat downgrade Full -> Lite). */

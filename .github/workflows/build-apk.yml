@@ -32,8 +32,10 @@ jobs:
         run: |
           mkdir -p out
           javac -encoding UTF-8 -d out $(find app/src/main/java/com/sampwrap/core -name '*.java') \
-                app/src/test/java/CoreTest.java
+                app/src/test/java/CoreTest.java app/src/test/java/DownloadTest.java
           java -Dfile.encoding=UTF-8 -cp out CoreTest
+          # resume/416/HTML: pakai server HTTP lokal, bukan jaringan luar
+          java -Dfile.encoding=UTF-8 -cp out DownloadTest
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
