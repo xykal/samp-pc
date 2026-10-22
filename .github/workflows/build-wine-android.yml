@@ -224,26 +224,44 @@ jobs:
           export NDK=$NDK_HOME
           export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           cd build-android
-          make install 2>&1 | tail -10
+          make install STRIP=true 2>&1 | tail -5
 
-          # tree Winlator menaruh hasil install di <prefix>/<abi>/ (arm64-v8a)
-          if [ -d /opt/wine-ours/arm64-v8a ]; then R=/opt/wine-ours/arm64-v8a; else R=/opt/wine-ours; fi
-          echo "root=$R"
-          cd "$R"
+          # host aarch64 -> exec_prefix = <prefix>/arm64-v8a (bin+lib),
+          # datadir tetap <prefix>/share. Layer runtime butuh bin/lib/share
+          # di root, sama seperti proton-9.0-arm64ec bawaan.
+          L=/tmp/layer
+          rm -rf "$L"; mkdir -p "$L"
+          ABI=/opt/wine-ours/arm64-v8a
+          [ -d "$ABI" ] || ABI=/opt/wine-ours
+          cp -a "$ABI/bin" "$ABI/lib" "$L/"
+          [ -d /opt/wine-ours/share ] && cp -a /opt/wine-ours/share "$L/" || true
 
-          # Header dev tidak diperlukan runtime (hemat ~47 MB)
-          rm -rf include
+          cd "$L"
+          # Dev-only + dokumentasi: tidak dipakai runtime
+          find . -type f \( -name '*.a' -o -name '*.def' \) -delete
+          rm -rf share/man share/doc include
 
-          echo "=== strip ELF (box64/wine tidak suka binary ber-debug_info) ==="
-          STRIP=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip
-          find . -type f \( -name '*.so' -o -name '*.so.*' -o -name 'wine' -o -name 'wineserver' \) -print0 \
-            | while IFS= read -r -d '' f; do
-                if file -b "$f" | grep -q '^ELF'; then "$STRIP" --strip-unneeded "$f" || exit 1; fi
-              done
+          # Loader: di wine 10 hasil multiarch loader ada di lib/wine/<arch>-unix/
+          # dan bin/wine dibuat sebagai symlink. Winlator menjalankan bin/wine,
+          # jadi harus file nyata (ekstraktor tar di HP tidak selalu bikin symlink).
+          for b in wine wine-preloader; do
+            if [ ! -f "bin/$b" ] && [ -f "lib/wine/aarch64-unix/$b" ]; then
+              cp "lib/wine/aarch64-unix/$b" "bin/$b"; chmod 755 "bin/$b"
+            fi
+          done
+          # symlink lain (wineboot -> wine, wineg++ -> winegcc) jadi file nyata
+          find bin -type l | while IFS= read -r l; do
+            t=$(readlink -f "$l" || true)
+            [ -n "$t" ] && [ -f "$t" ] && cp --remove-destination "$t" "$l" || true
+          done
+
+          echo "=== strip PE (i386) ==="
+          find lib -path '*i386-windows*' \( -name '*.dll' -o -name '*.exe' \) \
+            -exec i686-w64-mingw32-strip --strip-all {} + 2>/dev/null || true
 
           echo "=== struktur ==="
-          ls bin | head -10; ls lib/wine | head -10
-          echo "=== tipe file (harus 'for Android' / bionic) ==="
+          ls; ls bin | head -8; ls lib/wine
+          echo "=== tipe file (harus ARM aarch64 bionic) ==="
           file bin/wine bin/wineserver lib/wine/aarch64-unix/ntdll.so | sed 's/, BuildID.*//'
           echo "=== PE 32-bit ==="
           file lib/wine/i386-windows/ntdll.dll | sed 's/, BuildID.*//'
