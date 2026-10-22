@@ -120,6 +120,26 @@ jobs:
           cp -f /tmp/wine-layer.tar.zst "$LAYER"
           echo "== layer sendiri =="
           ls -l "$LAYER"
+
+          # app/build.gradle punya task downloadProton yang memvalidasi layer
+          # dengan ukuran+sha256 bawaan (proton 9.0 stock); kalau beda, file
+          # kita DIHAPUS lalu diunduh ulang. Jadi ukuran/sha di task itu
+          # ditimpa dengan milik layer kita sendiri.
+          SIZE=$(stat -c%s "$LAYER")
+          SHA=$(sha256sum "$LAYER" | cut -d' ' -f1)
+          python3 - "${{ inputs.wine_layer_url }}" "$SIZE" "$SHA" <<'PY'
+          import re, sys, pathlib
+          url, size, sha = sys.argv[1], sys.argv[2], sys.argv[3]
+          f = pathlib.Path('winlator/app/build.gradle')
+          s = f.read_text()
+          s = re.sub(r'String protonURL = "[^"]*"', 'String protonURL = "%s"' % url, s, count=1)
+          s = re.sub(r'String protonSHA256 = "[^"]*"', 'String protonSHA256 = "%s"' % sha, s, count=1)
+          s = re.sub(r'long protonSize = \d+L', 'long protonSize = %sL' % size, s, count=1)
+          f.write_text(s)
+          for line in s.splitlines():
+              if 'protonURL' in line or 'protonSHA256' in line or 'protonSize' in line:
+                  print('  ' + line.strip())
+          PY
           # sanity: harus ada bin/wine + PE i386 + unix ARM64
           python3 - <<'PY'
           import tarfile, zstandard, io
