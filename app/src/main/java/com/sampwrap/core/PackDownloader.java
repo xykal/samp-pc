@@ -111,15 +111,32 @@ public final class PackDownloader {
             String cr;
             long len;
             try {
-                code = c.getResponseCode();
+                code = ResumePolicy.status(c);
                 cr = c.getHeaderField("Content-Range");
                 len = c.getContentLengthLong();
             } catch (IOException ex) {
-                c.disconnect();
-                throw ex;
+                // JVM yang melempar untuk 4xx: tetap baca kodenya, jangan menyerah
+                int sc = ex instanceof HttpStatusException
+                        ? ((HttpStatusException) ex).code
+                        : ResumePolicy.codeFromMessage(ex.getMessage());
+                if (sc <= 0) {
+                    c.disconnect();
+                    throw ex;
+                }
+                code = sc;
+                cr = null;
+                len = -1;
             }
 
-            ResumePolicy.Action action = ResumePolicy.decide(have, code, cr, len);
+            // Manifest sudah memberi ukuran pasti: pakai itu kalau server tidak
+            // menyertakan Content-Range pada 416 (mis. Google Drive).
+            long totalKnown = ResumePolicy.totalFromContentRange(cr);
+            if (code == 416 && totalKnown <= 0) totalKnown = e.size;
+
+            ResumePolicy.Action action = (code == 416 && totalKnown > 0)
+                    ? (have == totalKnown ? ResumePolicy.Action.COMPLETE
+                                          : ResumePolicy.Action.RESTART)
+                    : ResumePolicy.decide(have, code, cr, len);
 
             if (action == ResumePolicy.Action.COMPLETE) {
                 c.disconnect();

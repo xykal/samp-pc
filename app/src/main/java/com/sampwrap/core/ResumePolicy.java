@@ -1,5 +1,8 @@
 package com.sampwrap.core;
 
+import java.io.IOException;
+import java.net.HttpURLConnection;
+
 /**
  * Aturan "boleh resume atau harus mulai dari nol" untuk unduhan HTTP.
  *
@@ -28,6 +31,29 @@ public final class ResumePolicy {
     }
 
     private ResumePolicy() {}
+
+    /**
+     * Kode status HTTP, tahan terhadap JVM yang melempar IOException untuk
+     * balasan 4xx (OpenJDK: "Server returned HTTP response code: 416 ...").
+     * Android mengembalikan kodenya seperti biasa — dua-duanya harus jalan.
+     */
+    public static int status(HttpURLConnection c) throws IOException {
+        try {
+            return c.getResponseCode();
+        } catch (IOException e) {
+            int code = codeFromMessage(e.getMessage());
+            if (code > 0) return code;
+            throw e;
+        }
+    }
+
+    /** "…HTTP response code: 416 for URL…" -> 416, selain itu -1. */
+    public static int codeFromMessage(String message) {
+        if (message == null) return -1;
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("HTTP response code:?\\s*(\\d{3})").matcher(message);
+        return m.find() ? Integer.parseInt(m.group(1)) : -1;
+    }
 
     /**
      * Total ukuran file dari header Content-Range.

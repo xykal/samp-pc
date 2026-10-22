@@ -415,6 +415,32 @@ public class InstallService extends Service {
                         if (start > 0) c.setRequestProperty("Range", "bytes=" + start + "-");
                         return c;
                     }
+
+                    @Override public long knownTotal() throws java.io.IOException {
+                        if (drive) return com.sampwrap.core.DriveDownloader.probeTotal(url);
+                        // 416 dari server biasa: minta 1 byte pertama untuk tahu total
+                        java.net.HttpURLConnection c = (java.net.HttpURLConnection)
+                                new java.net.URL(url).openConnection();
+                        try {
+                            c.setConnectTimeout(20000);
+                            c.setReadTimeout(20000);
+                            c.setRequestProperty("User-Agent",
+                                    "Mozilla/5.0 (Linux; Android) SAMP-PC");
+                            c.setRequestProperty("Range", "bytes=0-0");
+                            int code = com.sampwrap.core.ResumePolicy.status(c);
+                            if (code == 206) {
+                                return com.sampwrap.core.ResumePolicy
+                                        .totalFromContentRange(c.getHeaderField("Content-Range"));
+                            }
+                            if (code == 200) {
+                                long len = c.getContentLengthLong();
+                                return len > 0 ? len : -1;
+                            }
+                            return -1;
+                        } finally {
+                            c.disconnect();
+                        }
+                    }
                 };
 
         com.sampwrap.core.ResumableDownload.Listener listener =

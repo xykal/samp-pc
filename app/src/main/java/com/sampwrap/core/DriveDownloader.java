@@ -90,6 +90,7 @@ public final class DriveDownloader {
         if (id == null) throw new IOException("Link Drive tidak dikenali: " + urlOrId);
 
         IOException last = null;
+        int lastStatus = -1;
         StringBuilder tried = new StringBuilder();
         String[] bases = {
                 "https://drive.usercontent.google.com/download",
@@ -101,13 +102,18 @@ public final class DriveDownloader {
                 HttpURLConnection c = attempt(base, id, start);
                 return c;
             } catch (IOException e) {
+                if (e instanceof HttpStatusException) lastStatus = ((HttpStatusException) e).code;
                 if (tried.length() > 0) tried.append(", ");
                 tried.append(hostOf(base)).append("=").append(shortMsg(e));
                 last = e;
             }
         }
-        throw new IOException((last == null ? "Drive tidak bisa diakses" : last.getMessage())
-                + "\n\n(endpoint dicoba: " + tried + ")");
+        String aggregate = (last == null ? "Drive tidak bisa diakses" : last.getMessage())
+                + "\n\n(endpoint dicoba: " + tried + ")";
+        // 416 = soal range, bukan soal akses: teruskan kodenya supaya pemanggil
+        // bisa memutuskan "mulai dari nol" ketimbang menyerah.
+        if (lastStatus == 416) throw new HttpStatusException(416, aggregate, last);
+        throw new IOException(aggregate);
     }
 
     private static String hostOf(String url) {
@@ -130,11 +136,22 @@ public final class DriveDownloader {
         HttpURLConnection c = get(base + "?" + encode(q), start);
         // 416 = range tidak masuk akal. JANGAN dianggap error di sini: yang
         // memutuskan "mulai dari nol" adalah ResumableDownload/ResumePolicy.
-        if (c.getResponseCode() == 416) return c;
+        if (ResumePolicy.status(c) == 416) return c;
         if (!String.valueOf(c.getContentType()).contains("html")) return c;
 
         // halaman "virus scan warning" -> baca form konfirmasi + uuid
-        String html = readLimited(c);
+        String html;
+        try {
+            html = readLimited(c);
+        } catch (IOException e) {
+            // Di OpenJDK, 416 bisa baru muncul di sini (setelah redirect):
+            // getResponseCode() memberi kode lain, exception asli menempel di body.
+            int sc = e instanceof HttpStatusException
+                    ? ((HttpStatusException) e).code
+                    : ResumePolicy.codeFromMessage(e.getMessage());
+            if (sc > 0) throw new HttpStatusException(sc, e.getMessage(), e);
+            throw e;
+        }
         c.disconnect();
 
         String action = base;
@@ -150,7 +167,16 @@ public final class DriveDownloader {
 
         HttpURLConnection c2 = get(action + "?" + encode(form), start);
         if (String.valueOf(c2.getContentType()).contains("html")) {
-            String h2 = readLimited(c2);
+            String h2;
+            try {
+                h2 = readLimited(c2);
+            } catch (IOException e) {
+                int sc = e instanceof HttpStatusException
+                        ? ((HttpStatusException) e).code
+                        : ResumePolicy.codeFromMessage(e.getMessage());
+                if (sc > 0) throw new HttpStatusException(sc, e.getMessage(), e);
+                throw e;
+            }
             c2.disconnect();
             throw new IOException("Drive mengirim halaman, bukan file: " + summarize(h2));
         }
@@ -174,7 +200,7 @@ public final class DriveDownloader {
         c.setInstanceFollowRedirects(true);
         c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) SAMP-PC");
         if (start > 0) c.setRequestProperty("Range", "bytes=" + start + "-");
-        int code = c.getResponseCode();
+        int code = ResumePolicy.status(c);
         // 416 dibiarkan lolos: header Content-Range-nya justru dipakai untuk
         // memutuskan apakah file lokal sudah lengkap atau harus diulang dari 0.
         if (code >= 400 && code != 416) {
@@ -190,7 +216,7 @@ public final class DriveDownloader {
             } else if (code == 429) {
                 hint = " — terlalu banyak permintaan, tunggu sebentar.";
             }
-            throw new IOException("Drive membalas HTTP " + code + hint
+            throw new HttpStatusException(code, "Drive membalas HTTP " + code + hint
                     + (body.isEmpty() ? "" : "\n(" + body + ")"));
         }
         return c;
@@ -214,13 +240,49 @@ public final class DriveDownloader {
         }
     }
 
+    /**
+     * Ukuran total file di Drive, atau -1 kalau tidak bisa diketahui.
+     *
+     * Perlu karena Drive membalas 416 dengan halaman HTML **tanpa** header
+     * Content-Range. Cara satu-satunya: minta 1 byte pertama (bytes=0-0),
+     * balasannya 206 + "Content-Range: bytes 0-0/<total>".
+     */
+    public static long probeTotal(String urlOrId) {
+        String id = fileId(urlOrId);
+        if (id == null && urlOrId != null && urlOrId.matches("[A-Za-z0-9_-]{10,}")) id = urlOrId;
+        if (id == null) return -1;
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL("https://drive.usercontent.google.com/download?id="
+                    + id + "&export=download&confirm=t").openConnection();
+            c.setConnectTimeout(20000);
+            c.setReadTimeout(20000);
+            c.setInstanceFollowRedirects(true);
+            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) SAMP-PC");
+            c.setRequestProperty("Range", "bytes=0-0");
+            int code = ResumePolicy.status(c);
+            if (code == 206) return ResumePolicy.totalFromContentRange(c.getHeaderField("Content-Range"));
+            if (code == 200) {
+                long len = c.getContentLengthLong();
+                return len > 0 ? len : -1;
+            }
+            return -1;
+        } catch (Throwable t) {
+            return -1;
+        } finally {
+            if (c != null) {
+                try { c.disconnect(); } catch (Throwable ignored) { }
+            }
+        }
+    }
+
     /** Ringkasan singkat untuk layar Diagnostik (tanpa mengunduh isinya). */
     public static String probe(String urlOrId) {
         long t0 = System.currentTimeMillis();
         HttpURLConnection c = null;
         try {
             c = open(urlOrId);
-            int code = c.getResponseCode();
+            int code = ResumePolicy.status(c);
             String type = String.valueOf(c.getContentType());
             long len = c.getContentLengthLong();
             String out = "HTTP " + code

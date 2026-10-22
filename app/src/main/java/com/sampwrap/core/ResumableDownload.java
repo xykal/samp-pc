@@ -20,6 +20,16 @@ public final class ResumableDownload {
     /** Cara membuka koneksi, mulai dari byte ke-{start} (0 = dari awal). */
     public interface Source {
         HttpURLConnection open(long start) throws IOException;
+
+        /**
+         * Ukuran total file di server, kalau bisa diketahui tanpa mengunduh isinya.
+         * Dipakai saat server membalas 416 TANPA header Content-Range —
+         * Google Drive melakukan itu (balasannya halaman HTML error, bukan header).
+         * -1 kalau tidak diketahui.
+         */
+        default long knownTotal() throws IOException {
+            return -1;
+        }
     }
 
     public interface Listener {
@@ -82,16 +92,39 @@ public final class ResumableDownload {
 
         try {
             log(listener, "buka mulai byte " + have);
-            c = source.open(have);
-            int code = c.getResponseCode();
-            String type = String.valueOf(c.getContentType());
-            long len = c.getContentLengthLong();
-            String cr = c.getHeaderField("Content-Range");
+            int code;
+            String type, cr;
+            long len;
+            try {
+                c = source.open(have);
+                code = ResumePolicy.status(c);
+                type = String.valueOf(c.getContentType());
+                len = c.getContentLengthLong();
+                cr = c.getHeaderField("Content-Range");
+            } catch (HttpStatusException e) {
+                // JVM yang melempar untuk 4xx (mis. OpenJDK saat 416) — perlakukan
+                // sebagai kode status biasa; header tidak tersedia.
+                code = e.code;
+                type = "";
+                len = -1;
+                cr = null;
+                c = null;
+            }
             log(listener, "HTTP " + code + " tipe=" + type + " panjang=" + len
                     + (cr == null ? "" : " range=" + cr));
 
             if (code == 416) {
                 long total = ResumePolicy.totalFromContentRange(cr);
+                if (total <= 0) {
+                    // Drive membalas 416 dengan halaman HTML tanpa Content-Range.
+                    // Tanya ukuran aslinya lewat 1 byte (Range: bytes=0-0).
+                    try {
+                        total = source.knownTotal();
+                    } catch (IOException e) {
+                        log(listener, "gagal tanya ukuran total: " + e.getMessage());
+                    }
+                    if (total > 0) log(listener, "ukuran file di server: " + total + " byte");
+                }
                 if (total > 0 && have == total) {
                     log(listener, "416 tapi ukuran lokal == total (" + total + ") → selesai");
                     return have;

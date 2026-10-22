@@ -104,6 +104,45 @@ public class DownloadTest {
             }
         });
 
+        // /.drive416 — meniru Google Drive: 416 dibalas HTML, TANPA Content-Range
+        srv.createContext("/drive416", ex -> {
+            requests.incrementAndGet();
+            String range = ex.getRequestHeaders().getFirst("Range");
+            long start = parseStart(range);
+            boolean oneByte = "bytes=0-0".equals(range);
+            if (start >= body.length) {
+                byte[] html = ("<html><body>Error 416 (Bad Request)!!1</body></html>")
+                        .getBytes("UTF-8");
+                ex.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
+                ex.sendResponseHeaders(416, html.length);
+                try (OutputStream os = ex.getResponseBody()) {
+                    os.write(html);
+                }
+                return;
+            }
+            if (oneByte) {
+                ex.getResponseHeaders().add("Content-Range", "bytes 0-0/" + body.length);
+                ex.sendResponseHeaders(206, 1);
+                try (OutputStream os = ex.getResponseBody()) {
+                    os.write(body, 0, 1);
+                }
+                return;
+            }
+            if (start > 0) {
+                ex.getResponseHeaders().add("Content-Range",
+                        "bytes " + start + "-" + (body.length - 1) + "/" + body.length);
+                ex.sendResponseHeaders(206, body.length - start);
+                try (OutputStream os = ex.getResponseBody()) {
+                    os.write(body, (int) start, (int) (body.length - start));
+                }
+                return;
+            }
+            ex.sendResponseHeaders(200, body.length);
+            try (OutputStream os = ex.getResponseBody()) {
+                os.write(body);
+            }
+        });
+
         // /.forbidden — 403 seperti kuota Drive habis
         srv.createContext("/forbidden", ex -> {
             requests.incrementAndGet();
@@ -315,6 +354,27 @@ public class DownloadTest {
         File got = new File(dlDir, "models/gta3.img");
         check("file jadi & benar (" + st.bytes + " B)", got.isFile() && same(got, body));
 
+        // ------------------- 13. ala Google Drive: 416 tanpa Content-Range, file LENGKAP
+        System.out.println("\n[13] Drive: 416 tanpa Content-Range, file lokal == total -> tidak unduh ulang");
+        Files.write(dst.toPath(), body);
+        requests.set(0);
+        final StringBuilder log13 = new StringBuilder();
+        long got13 = ResumableDownload.fetch(dst, driveSource(base(srv), log13), 3,
+                listener(log13));
+        check("dianggap selesai tanpa unduh isi (" + got13 + ")", got13 == body.length);
+        check("tanya ukuran lewat probe (2 request)", requests.get() == 2);
+        check("log menyebut ukuran server", log13.toString().contains("ukuran file di server"));
+
+        // ------------------- 14. ala Google Drive: 416 karena file lokal kebesaran
+        System.out.println("\n[14] Drive: 416 karena file lokal lebih besar -> probe total, ulang dari 0");
+        Files.write(dst.toPath(), payload(body.length + 7_000));
+        log13.setLength(0);
+        ResumableDownload.fetch(dst, driveSource(base(srv), log13), 3, listener(log13));
+        check("isi akhir benar", same(dst, body));
+        check("log menyebut 416 lalu unduh ulang",
+                log13.toString().contains("416")
+                        && log13.toString().contains("selesai " + body.length + " byte"));
+
         srv.stop(0);
         flaky.stop(0);
 
@@ -322,6 +382,37 @@ public class DownloadTest {
                 ? "\nSEMUA TEST LULUS"
                 : "\n" + failed + " TEST GAGAL");
         System.exit(failed == 0 ? 0 : 1);
+    }
+
+    /** Source yang meniru DriveDownloader.probeTotal: ukuran lewat Range 0-0. */
+    static ResumableDownload.Source driveSource(final String base, final StringBuilder sb) {
+        return new ResumableDownload.Source() {
+            @Override public HttpURLConnection open(long start) throws IOException {
+                return conn(base + "/drive416", start);
+            }
+
+            @Override public long knownTotal() throws IOException {
+                HttpURLConnection c = (HttpURLConnection)
+                        new URL(base + "/drive416").openConnection();
+                c.setConnectTimeout(5000);
+                c.setReadTimeout(5000);
+                c.setRequestProperty("Range", "bytes=0-0");
+                try {
+                    int code = c.getResponseCode();
+                    if (code == 206) {
+                        return ResumePolicy.totalFromContentRange(
+                                c.getHeaderField("Content-Range"));
+                    }
+                    if (code == 200) {
+                        long len = c.getContentLengthLong();
+                        return len > 0 ? len : -1;
+                    }
+                    return -1;
+                } finally {
+                    c.disconnect();
+                }
+            }
+        };
     }
 
     static ResumableDownload.Listener listener(final StringBuilder sb) {
