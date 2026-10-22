@@ -22,6 +22,14 @@ on:
         description: 'hapus ikon launcher Winlator asli (1 ikon saja)'
         required: true
         default: 'true'
+      wine_layer_url:
+        description: 'URL layer wine pengganti (kosong = pakai bawaan fork)'
+        required: false
+        default: 'https://github.com/xykal/samp-pc-download/releases/download/wine-10.17-arm64/wine-10.17-bionic-arm64.tar.zst'
+      wine_layer_sha256:
+        description: 'sha256 layer wine (kosong = tanpa verifikasi)'
+        required: false
+        default: 'efd533ee3048c2d7b34ae4fd594e565d4a26032d8ee1aa6d5492da59f1c1afe1'
 
 jobs:
   build:
@@ -77,6 +85,35 @@ jobs:
           ls winlator/app/src/main/cpp/adrenotools | head -20
           test -f winlator/app/src/main/cpp/adrenotools/CMakeLists.txt && echo "adrenotools OK"
           test -f winlator/app/src/main/cpp/OpenXR-SDK/CMakeLists.txt && echo "OpenXR OK"
+
+      - name: Ganti layer Wine dengan build sendiri
+        if: inputs.wine_layer_url != ''
+        run: |
+          set -e
+          LAYER=winlator/app/src/main/assets/proton-9.0-arm64ec.tar.zst
+          echo "== layer bawaan =="
+          ls -l "$LAYER"
+          curl -fsSL -o /tmp/wine-layer.tar.zst "${{ inputs.wine_layer_url }}"
+          if [ -n "${{ inputs.wine_layer_sha256 }}" ]; then
+            echo "${{ inputs.wine_layer_sha256 }}  /tmp/wine-layer.tar.zst" | sha256sum -c -
+          fi
+          cp -f /tmp/wine-layer.tar.zst "$LAYER"
+          echo "== layer sendiri =="
+          ls -l "$LAYER"
+          # sanity: harus ada bin/wine + PE i386 + unix ARM64
+          python3 - <<'PY'
+          import tarfile, zstandard, io
+          d = zstandard.ZstdDecompressor()
+          names = []
+          with open('/tmp/wine-layer.tar.zst','rb') as f, d.stream_reader(f) as r:
+              tf = tarfile.open(fileobj=r, mode='r|')
+              for m in tf: names.append(m.name.lstrip('./'))
+          need = ['bin/wine', 'bin/wineserver', 'lib/wine/aarch64-unix/ntdll.so',
+                  'lib/wine/i386-windows/ntdll.dll', 'share/wine/wine.inf']
+          miss = [n for n in need if n not in names]
+          print('entri', len(names), '| hilang:', miss or 'tidak ada')
+          assert not miss
+          PY
 
       - name: Branding (ikon + nama app)
         run: |
