@@ -30,6 +30,14 @@ on:
         description: 'sha256 layer wine (kosong = tanpa verifikasi)'
         required: false
         default: 'efd533ee3048c2d7b34ae4fd594e565d4a26032d8ee1aa6d5492da59f1c1afe1'
+      imagefs_url:
+        description: 'URL imagefs.tar.zst kalau fork tidak membawanya (kosong = lewati)'
+        required: false
+        default: 'https://github.com/xykal/samp-pc-download/releases/download/wine-10.17-arm64/imagefs-v1.8.1.tar.zst'
+      imagefs_sha256:
+        description: 'sha256 imagefs (kosong = tanpa verifikasi)'
+        required: false
+        default: '7838756e6a05c91afff68f4bf12aa2780f815877753f8dd354e203e99b9caf8a'
 
 jobs:
   build:
@@ -86,13 +94,25 @@ jobs:
           test -f winlator/app/src/main/cpp/adrenotools/CMakeLists.txt && echo "adrenotools OK"
           test -f winlator/app/src/main/cpp/OpenXR-SDK/CMakeLists.txt && echo "OpenXR OK"
 
-      - name: Ganti layer Wine dengan build sendiri
+      - name: Siapkan aset engine (imagefs + layer Wine sendiri)
         if: inputs.wine_layer_url != ''
         run: |
           set -e
+          cd winlator/app/src/main/assets
+          # ImageFsInstaller.installFromAssets() butuh imagefs.tar.zst di assets.
+          # Fork 4.1 sekarang tidak lagi membawanya (unduh dari internet), jadi
+          # kita tanam dari rilis kita supaya tetap zero-setup/offline.
+          if [ ! -f imagefs.tar.zst ] && [ -n "${{ inputs.imagefs_url }}" ]; then
+            curl -fsSL -o imagefs.tar.zst "${{ inputs.imagefs_url }}"
+            if [ -n "${{ inputs.imagefs_sha256 }}" ]; then
+              echo "${{ inputs.imagefs_sha256 }}  imagefs.tar.zst" | sha256sum -c -
+            fi
+          fi
+          ls -l imagefs.tar.zst || echo "PERINGATAN: imagefs.tar.zst tidak ada"
+          cd "$GITHUB_WORKSPACE"
           LAYER=winlator/app/src/main/assets/proton-9.0-arm64ec.tar.zst
           echo "== layer bawaan =="
-          ls -l "$LAYER"
+          ls -l "$LAYER" 2>/dev/null || echo "(tidak ada — memakai punya kita)"
           curl -fsSL -o /tmp/wine-layer.tar.zst "${{ inputs.wine_layer_url }}"
           if [ -n "${{ inputs.wine_layer_sha256 }}" ]; then
             echo "${{ inputs.wine_layer_sha256 }}  /tmp/wine-layer.tar.zst" | sha256sum -c -
