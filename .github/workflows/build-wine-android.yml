@@ -225,13 +225,29 @@ jobs:
           export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           cd build-android
           make install 2>&1 | tail -10
-          cd /opt/wine-ours
+
+          # tree Winlator menaruh hasil install di <prefix>/<abi>/ (arm64-v8a)
+          if [ -d /opt/wine-ours/arm64-v8a ]; then R=/opt/wine-ours/arm64-v8a; else R=/opt/wine-ours; fi
+          echo "root=$R"
+          cd "$R"
+
+          # Header dev tidak diperlukan runtime (hemat ~47 MB)
+          rm -rf include
+
+          echo "=== strip ELF (box64/wine tidak suka binary ber-debug_info) ==="
+          STRIP=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip
+          find . -type f \( -name '*.so' -o -name '*.so.*' -o -name 'wine' -o -name 'wineserver' \) -print0 \
+            | while IFS= read -r -d '' f; do
+                if file -b "$f" | grep -q '^ELF'; then "$STRIP" --strip-unneeded "$f" || exit 1; fi
+              done
+
           echo "=== struktur ==="
-          ls bin lib/wine 2>/dev/null | head -20
+          ls bin | head -10; ls lib/wine | head -10
           echo "=== tipe file (harus 'for Android' / bionic) ==="
-          file bin/wine bin/wineserver lib/wine/aarch64-unix/ntdll.so 2>/dev/null | sed 's/, BuildID.*//'
+          file bin/wine bin/wineserver lib/wine/aarch64-unix/ntdll.so | sed 's/, BuildID.*//'
           echo "=== PE 32-bit ==="
-          file lib/wine/i386-windows/ntdll.dll 2>/dev/null
+          file lib/wine/i386-windows/ntdll.dll | sed 's/, BuildID.*//'
+          echo "=== ukuran ==="
           du -sh .
           tar -c --owner=0 --group=0 . | zstd -19 -T0 -o /tmp/wine-ours-bionic.tar.zst
           ls -l /tmp/wine-ours-bionic.tar.zst
