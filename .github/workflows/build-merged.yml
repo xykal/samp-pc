@@ -25,11 +25,11 @@ on:
       wine_layer_url:
         description: 'URL layer wine pengganti (kosong = pakai bawaan fork)'
         required: false
-        default: 'https://github.com/xykal/samp-pc-download/releases/download/wine-10.17-arm64/wine-10.17-bionic-arm64.tar.zst'
+        default: 'https://github.com/xykal/samp-pc-download/releases/download/wine-10.17-arm64/wine-10.17-bionic-arm64-v2.tar.zst'
       wine_layer_sha256:
         description: 'sha256 layer wine (kosong = tanpa verifikasi)'
         required: false
-        default: 'efd533ee3048c2d7b34ae4fd594e565d4a26032d8ee1aa6d5492da59f1c1afe1'
+        default: '2ab2c2d20357a9bbebe07a2ac6e2608db233f8f3982b0f70fbf94a43ac74ecb6'
       imagefs_url:
         description: 'URL imagefs.tar.zst kalau fork tidak membawanya (kosong = lewati)'
         required: false
