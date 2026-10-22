@@ -320,3 +320,26 @@ yang paling banyak iterasi.
 
 Detail: `docs/WINE-SENDIRI.md`. Engine Proton yang sekarang **tidak disentuh**
 supaya app tetap bisa dipakai.
+
+## 16. v1.9.0 — engine sendiri sudah masuk APK (2026-10-22)
+
+Ringkas hasil lanjutan dari §15:
+
+| Langkah | Hasil |
+|---|---|
+| Workflow bionic `build-wine-android.yml` (ID 392212432) | ✅ run 39701770654 sukses |
+| Wine 10.17, host `aarch64-linux-android28`, PE i386, `winex11.drv` | ✅ |
+| Artefak layer | 32.514.687 B (31,0 MiB), sha256 `efd533ee…c1afe1` |
+| APK v1.9.0 | 459.859.571 B (turun 40,9 MB dari v1.8.1) |
+| Aset di APK | `imagefs.tar.zst` 193.425.249 B (tetap) + `proton-9.0-arm64ec.tar.zst` = **layer kita** 32.514.687 B |
+| Verifikasi | ELF ARM64 bionic (`linker64`), PE i386, isi `bin/lib/share` lengkap, APK signed, nama app XversSamp, `libsampunrar.so` ada |
+| Uji di HP ARM64 | ❌ belum — tidak ada perangkat di sandbox |
+
+Iterasi yang dilalui (semua sudah diperbaiki, detail di `docs/WINE-SENDIRI.md`):
+multilib host → FreeType di stage 0 → `wineandroid.drv` → `regparm` (header glibc)
+→ `SONAME_LIBX11` → `-lX11` (LDFLAGS + symlink imagefs) → `XF86VidMode` →
+path install `arm64-v8a` → task `downloadProton` di `app/build.gradle` yang
+menghapus layer kita dan mengunduh stock.
+
+Konsekuensi: layer Wine bawaan (70,2 MB) tidak dipakai lagi; kalau runtime gagal,
+v1.8.1 tetap tersedia sebagai pembanding.
