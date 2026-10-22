@@ -351,3 +351,19 @@ v1.9.0 kehilangan 14 program PE karena `configure.ac` meng-default
 ke `$HOST_ARCH` (aarch64) sedangkan PE yang dibangun hanya i386. Setelah
 `--enable-<program>=i386`, jumlah EXE naik 100 → 109 dan `wineboot.exe`,
 `services.exe`, `rpcss.exe` ada. v1.9.0 ditandai *prerelease* dan digantikan v1.9.1.
+
+## 17. v1.9.2 — download 416 (2026-10-22)
+
+User: "drive membalas HTTP 416". Sebab: file sementara `.download` lebih besar
+dari file asli → `Range` di luar ukuran → 416, dan kode lama menganggap 416
+= "sudah lengkap".
+
+Diukur langsung ke Drive: 416 dibalas **HTML tanpa Content-Range**, jadi total
+harus ditanya lewat probe `Range: bytes=0-0`. OpenJDK juga melempar IOException
+untuk 416 (Android mengembalikan kode) → `HttpStatusException`.
+
+Ditambah: `ResumePolicy`, `ResumableDownload`, cek magic `Rar!`/`PK`,
+`PackDownloader` pulih 416, `DownloadTest` 32 assertion di CI.
+
+Uji nyata: file +1 byte → probe → ulang dari 0 → `Rar!`; file pas → selesai
+tanpa unduh; resume 1 MB → 206 nyambung. APK v1.9.2 460.149.903 B.
