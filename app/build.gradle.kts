@@ -10,8 +10,8 @@ android {
         applicationId = "com.sampwrap.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 193
+        versionName = "1.9.3"
 
         // Konfigurasi branding & hosting ada di assets/app_config.properties
     }

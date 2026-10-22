@@ -35,10 +35,26 @@ public final class Prefs {
         sp(c).edit().putString(K_PACK_URL, v == null ? "" : v.trim()).apply();
     }
 
-    /** Sumber paket yang benar-benar dipakai. */
+    /** Sumber paket yang benar-benar dipakai (yang pertama). */
     public static String effectivePackUrl(Context c) {
         String own = packUrl(c);
-        return own.isEmpty() ? AppConfig.packArchiveUrl() : own;
+        if (!own.isEmpty()) return own;
+        java.util.List<String> all = AppConfig.packArchiveSources();
+        return all.isEmpty() ? "" : all.get(0);
+    }
+
+    /**
+     * Semua sumber yang boleh dicoba, berurutan.
+     * Kalau user menempel link sendiri, hanya link itu yang dipakai.
+     */
+    public static java.util.List<String> candidatePackUrls(Context c) {
+        String own = packUrl(c);
+        if (!own.isEmpty()) {
+            java.util.ArrayList<String> one = new java.util.ArrayList<>();
+            one.add(own);
+            return one;
+        }
+        return AppConfig.packArchiveSources();
     }
 
     public static String nick(Context c) {

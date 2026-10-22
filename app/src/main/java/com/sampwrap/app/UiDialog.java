@@ -36,6 +36,7 @@ public final class UiDialog {
         private Runnable onNeu;
         private Runnable onPos, onNeg;
         private boolean cancelable = true;
+        private String preText;
         private CharSequence[] items;
         private int checkedIndex = -1;
         private DialogInterface.OnClickListener itemListener;
@@ -44,6 +45,9 @@ public final class UiDialog {
 
         public Alert title(String t) { this.title = t; return this; }
         public Alert message(String m) { this.message = m; return this; }
+
+        /** Teks panjang (log/laporan): digulir, huruf monospace, bisa diseleksi. */
+        public Alert preformatted(String t) { this.preText = t; return this; }
         public Alert positive(String t, Runnable r) { this.posText = t; this.onPos = r; return this; }
         public Alert negative(String t, Runnable r) { this.negText = t; this.onNeg = r; return this; }
         public Alert cancelable(boolean b) { this.cancelable = b; return this; }
@@ -89,6 +93,24 @@ public final class UiDialog {
                 TextView tv = UiKit.text(ctx, message, 14, false, UiKit.MUTED);
                 tv.setPadding(0, UiKit.dp(ctx, 8), 0, 0);
                 card.addView(tv);
+            }
+
+            if (preText != null) {
+                android.widget.ScrollView sc = new android.widget.ScrollView(ctx);
+                TextView tv = new TextView(ctx);
+                tv.setText(preText);
+                tv.setTextSize(11f);
+                tv.setTextColor(UiKit.TEXT);
+                tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+                tv.setTextIsSelectable(true);
+                int pad = UiKit.dp(ctx, 10);
+                tv.setPadding(pad, pad, pad, pad);
+                sc.addView(tv);
+                int h = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.55f);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, h);
+                lp.topMargin = UiKit.dp(ctx, 8);
+                card.addView(sc, lp);
             }
 
             if (items != null) {

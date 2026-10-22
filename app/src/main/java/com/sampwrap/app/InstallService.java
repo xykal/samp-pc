@@ -228,7 +228,7 @@ public class InstallService extends Service {
         if (space != null) throw new Exception(space.replace('\n', ' '));
 
         postProgress("Mengunduh paket…", -1, 0, false);
-        downloadFile(packUrl, arc, "paket",
+        downloadFile(com.sampwrap.app.Prefs.candidatePackUrls(this), arc, "paket",
                 m.totalSize(tags) + 300L * 1024 * 1024);
 
         // arsip TIDAK dihapus kalau masih gagal — biar bisa diulang tanpa unduh ulang
@@ -349,11 +349,11 @@ public class InstallService extends Service {
 
     /** Client SA-MP hasil bedah installer (di-host terpisah, cuma ±24 MB). */
     private void installClient(File tmp, File game) throws Exception {
-        String url = AppConfig.packClientUrl();
-        if (url.isEmpty()) return;
+        java.util.List<String> urls = AppConfig.packClientSources();
+        if (urls.isEmpty()) return;
         postProgress("Mengunduh client SA-MP…", -1, 0, false);
         File zip = new File(tmp, "client.zip");
-        downloadFile(url, zip, "client SA-MP", 0);
+        downloadFile(urls, zip, "client SA-MP", 0);
         postProgress("Memasang SA-MP…", -1, 0, false);
         InstallLog.w(this, "unzip client -> " + game.getAbsolutePath());
         unzipTo(zip, game);
@@ -398,8 +398,34 @@ public class InstallService extends Service {
      *   - hasil unduhan dicek magic-nya (RAR!/PK). Kalau ternyata bukan arsip,
      *     file dibuang dan diunduh ulang dari nol — bukan diteruskan ke ekstraktor.
      */
-    private void downloadFile(final String url, final File dst, final String label,
+    private void downloadFile(java.util.List<String> urls, final File dst, final String label,
                               long extraNeeded) throws Exception {
+        if (urls == null || urls.isEmpty()) throw new Exception("Tidak ada sumber untuk " + label);
+        Exception last = null;
+        for (int i = 0; i < urls.size(); i++) {
+            String url = urls.get(i);
+            if (i > 0) {
+                InstallLog.w(this, "sumber utama gagal, pindah ke cermin " + i + ": " + hostOf(url));
+                postProgress("Sumber utama gagal — coba cermin " + i + "…", -1, 0, false);
+            }
+            try {
+                downloadOne(url, dst, label, extraNeeded);
+                return;
+            } catch (Exception e) {
+                last = e;
+                InstallLog.w(this, "  sumber " + (i + 1) + "/" + urls.size() + " gagal: " + e.getMessage());
+            }
+        }
+        throw new Exception("Unduhan " + label + " gagal di semua sumber (" + urls.size()
+                + "). Terakhir: " + (last == null ? "?" : last.getMessage()));
+    }
+
+    private static String hostOf(String url) {
+        try { return new java.net.URL(url).getHost(); } catch (Exception e) { return url; }
+    }
+
+    private void downloadOne(final String url, final File dst, final String label,
+                             long extraNeeded) throws Exception {
         final boolean drive = com.sampwrap.core.DriveDownloader.isDrive(url);
 
         com.sampwrap.core.ResumableDownload.Source src =

@@ -199,71 +199,220 @@ public class MainActivity extends Activity {
                 });
     }
 
+    /**
+     * Diagnostik yang TIDAK boleh ikut gagal.
+     *
+     * Pelajaran dari lapangan: satu panggilan yang melempar (mis. cek Drive saat
+     * sinyal jelek) bikin seluruh laporan jadi "Diagnostik error: java.io…",
+     * dan log yang justru dibutuhkan malah tidak muncul. Jadi:
+     *   - setiap bagian punya try/catch sendiri,
+     *   - log ditaruh di AWAL (paling penting),
+     *   - ukuran folder dihitung cepat (dibatasi), tidak menunggu 4,7 GB,
+     *   - teks lengkap bisa digulir, disalin, dan disimpan ke file.
+     */
     private void showDiagnostics() {
         Spinner sp = new Spinner(this, "Memeriksa…");
         sp.show();
         new Thread(() -> {
-            StringBuilder sb = new StringBuilder();
+            final StringBuilder sb = new StringBuilder();
+            InstallLog.w(this, "diagnostik dibuka");
+
+            // ---- 1. identitas ----
+            sb.append("APP     : ").append(AppConfig.appLabel()).append("  v").append(safe(() -> {
+                android.content.pm.PackageInfo pi =
+                        getPackageManager().getPackageInfo(getPackageName(), 0);
+                return pi.versionName + " (" + pi.versionCode + ")";
+            })).append('\n');
+            sb.append("PAKET   : ").append(getPackageName()).append('\n');
+            sb.append("ABI     : ").append(android.text.TextUtils.join(", ",
+                    android.os.Build.SUPPORTED_ABIS)).append('\n');
+            sb.append("HP      : ").append(android.os.Build.MANUFACTURER).append(' ')
+                    .append(android.os.Build.MODEL).append(" · Android ")
+                    .append(android.os.Build.VERSION.RELEASE)
+                    .append(" (API ").append(android.os.Build.VERSION.SDK_INT).append(")\n");
+
+            // ---- 2. penyimpanan ----
+            File dir = GameDir.get(this);
+            sb.append("FOLDER  : ").append(safe(() -> dir.getAbsolutePath())).append('\n');
+            sb.append("MODE    : ").append(safe(() -> StorageTarget.currentMode(this).toString()))
+                    .append('\n');
+            long free = -1;
+            try { free = StorageTarget.freeBytes(dir); } catch (Throwable ignored) {}
+            sb.append("RUANG   : bebas ")
+                    .append(free < 0 ? "?" : Manifest.humanSize(free)).append('\n');
+            sb.append("BUTUH   : ").append(safe(this::neededSpaceText)).append('\n');
+            sb.append("DATA    : ").append(fastDirSize(dir)).append('\n');
+            sb.append("RAR     : ").append(safe(() ->
+                    RarNative.available() ? "siap" : "TIDAK BISA DIMUAT")).append('\n');
+            sb.append("samp.exe: ").append(new File(dir, "samp.exe").isFile() ? "ada" : "belum ada")
+                    .append('\n');
+            sb.append("ISI     : ").append(safe(() -> topLevelNames(dir))).append('\n');
+            sb.append("SISA    : ").append(safe(this::leftoverText)).append('\n');
+
+            // ---- 3. log: yang paling dibutuhkan, jangan sampai terpotong ----
+            sb.append("\n--- LOG TERAKHIR ---\n").append(InstallLog.read(this));
+
+            // ---- 4. tes tiap sumber paket (satu-satunya bagian yang pakai jaringan) ----
+            sb.append("\n--- SUMBER PAKET ---\n");
+            java.util.List<String> urls;
             try {
-                String ver = "?";
-                try {
-                    android.content.pm.PackageInfo pi =
-                            getPackageManager().getPackageInfo(getPackageName(), 0);
-                    ver = pi.versionName + " (" + pi.versionCode + ")";
-                } catch (Throwable ignored) {}
-                sb.append("APP     : ").append(AppConfig.appLabel()).append("  v").append(ver).append('\n');
-                sb.append("PAKET   : ").append(getPackageName()).append('\n');
-                sb.append("ABI     : ").append(android.text.TextUtils.join(", ",
-                        android.os.Build.SUPPORTED_ABIS)).append('\n');
-                sb.append("HP      : ").append(android.os.Build.MANUFACTURER).append(' ')
-                        .append(android.os.Build.MODEL).append(" · Android ")
-                        .append(android.os.Build.VERSION.RELEASE)
-                        .append(" (API ").append(android.os.Build.VERSION.SDK_INT).append(")\n");
-
-                File dir = GameDir.get(this);
-                long free = StorageTarget.freeBytes(dir);
-                sb.append("FOLDER  : ").append(dir.getAbsolutePath()).append('\n');
-                sb.append("MODE    : ").append(StorageTarget.currentMode(this)).append('\n');
-                sb.append("RUANG   : bebas ").append(free < 0 ? "?" : Manifest.humanSize(free)).append('\n');
-                sb.append("DATA    : ").append(Manifest.humanSize(GameDir.size(dir))).append('\n');
-                sb.append("RAR     : ").append(RarNative.available() ? "siap" : "TIDAK BISA DIMUAT").append('\n');
-                sb.append("samp.exe: ").append(new File(dir, "samp.exe").isFile() ? "ada" : "belum ada").append('\n');
-                sb.append("ISI     : ").append(topLevelNames(dir)).append('\n');
-
-                String url = Prefs.effectivePackUrl(this);
-                sb.append("SUMBER  : ").append(url.isEmpty() ? "(kosong!)" : url).append('\n');
-
-                sb.append("\n--- TES KE SERVER ---\n");
-                if (!url.isEmpty()) {
-                    if (com.sampwrap.core.DriveDownloader.isDrive(url)) {
-                        sb.append(com.sampwrap.core.DriveDownloader.probe(url)).append('\n');
-                    } else {
-                        sb.append("URL biasa (bukan Drive)\n");
-                    }
-                } else {
-                    sb.append("URL paket kosong.\n");
-                }
-
-                sb.append("\n--- LOG TERAKHIR ---\n").append(InstallLog.read(this));
-                String crash = CrashGuard.last(this);
-                if (crash != null) {
-                    sb.append("\n--- CRASH TERAKHIR ---\n")
-                      .append(crash.length() > 1500 ? crash.substring(0, 1500) + "\n…" : crash);
-                }
+                urls = Prefs.candidatePackUrls(this);
             } catch (Throwable t) {
-                sb.append("\nDiagnostik error: ").append(t);
+                urls = new java.util.ArrayList<>();
+                sb.append("(daftar sumber tidak terbaca: ").append(t).append(")\n");
             }
+            if (urls.isEmpty()) sb.append("(kosong!)\n");
+            for (int i = 0; i < urls.size(); i++) {
+                sb.append(i == 0 ? "[utama] " : "[cermin] ").append(testSource(urls.get(i))).append('\n');
+            }
+            sb.append("CLIENT  : ").append(safe(() -> {
+                java.util.List<String> c = AppConfig.packClientSources();
+                return c.isEmpty() ? "(kosong)" : c.size() + " sumber, utama=" + hostOf(c.get(0));
+            })).append('\n');
+
+            // ---- 5. crash terakhir ----
+            String crash = null;
+            try { crash = CrashGuard.last(this); } catch (Throwable ignored) {}
+            if (crash != null) {
+                sb.append("\n--- CRASH TERAKHIR ---\n")
+                  .append(crash.length() > 1500 ? crash.substring(0, 1500) + "\n…" : crash);
+            }
+
             final String report = sb.toString();
             ui.post(() -> {
                 sp.dismiss();
                 new UiDialog.Alert(MainActivity.this)
                         .title("Diagnostik")
-                        .message(report.length() > 2500 ? report.substring(0, 2500) + "\n…" : report)
+                        .message("Teks bisa digulir. Kirim ini kalau masih gagal.")
+                        .preformatted(report)
                         .neutral("Salin", () -> copy("diagnostik", report))
+                        .negative("Simpan", () -> saveReport(report))
                         .positive("Tutup", null)
                         .show();
             });
         }, "diagnostics").start();
+    }
+
+    /** Jalankan bagian laporan; kalau melempar, tulis pesan singkat — jangan gagal total. */
+    private static String safe(Supplier<String> part) {
+        try {
+            String v = part.get();
+            return v == null ? "?" : v;
+        } catch (Throwable t) {
+            return "(gagal: " + t.getClass().getSimpleName()
+                    + (t.getMessage() == null ? "" : ": " + t.getMessage()) + ")";
+        }
+    }
+
+    private interface Supplier<T> { T get() throws Exception; }
+
+    private static String hostOf(String url) {
+        try { return new java.net.URL(url).getHost(); } catch (Exception e) { return url; }
+    }
+
+    /** Ukuran folder, tapi berhenti setelah 20.000 file / 2 dtk supaya layar tidak menggantung. */
+    private static String fastDirSize(File dir) {
+        final long[] sum = {0};
+        final int[] n = {0};
+        final long until = System.currentTimeMillis() + 2000;
+        final boolean[] cut = {false};
+        try {
+            walk(dir, sum, n, until, cut);
+        } catch (Throwable ignored) {}
+        return Manifest.humanSize(sum[0]) + "  (" + n[0] + " file" + (cut[0] ? ", dipotong" : "") + ")";
+    }
+
+    private static void walk(File f, long[] sum, int[] n, long until, boolean[] cut) {
+        if (f == null || cut[0]) return;
+        if (System.currentTimeMillis() > until || n[0] > 20000) { cut[0] = true; return; }
+        if (f.isFile()) { sum[0] += f.length(); n[0]++; return; }
+        File[] kids = f.listFiles();
+        if (kids == null) return;
+        for (File k : kids) {
+            walk(k, sum, n, until, cut);
+            if (cut[0]) return;
+        }
+    }
+
+    /** Berapa ruang yang dibutuhkan paket sesuai tier yang dipilih. */
+    private String neededSpaceText() throws Exception {
+        Manifest m = ManifestStore.load(this);
+        long data = m.totalSize(m.tagsFor(Prefs.pack(this)));
+        long need = data + 800L * 1024 * 1024;
+        return Manifest.humanSize(need) + "  (data " + Manifest.humanSize(data)
+                + " + cadangan 800 MB, tier " + Prefs.pack(this) + ")";
+    }
+
+    /** Sisa file sementara yang bikin resume kacau. */
+    private String leftoverText() {
+        File tmp = new File(GameDir.get(this).getParentFile(), ".tmp");
+        StringBuilder sb = new StringBuilder();
+        File[] fs = tmp.listFiles();
+        if (fs == null || fs.length == 0) return "tidak ada file sementara";
+        for (File f : fs) {
+            if (f.getName().endsWith(".download") || f.getName().endsWith(".part")
+                    || f.getName().endsWith(".rar") || f.getName().endsWith(".zip")) {
+                if (sb.length() > 0) sb.append(", ");
+                sb.append(f.getName()).append('=').append(Manifest.humanSize(f.length()));
+            }
+        }
+        return sb.length() == 0 ? "tidak ada file sementara" : sb.toString();
+    }
+
+    /** Cek satu URL: kode HTTP, tipe, ukuran total. Tidak pernah melempar. */
+    private String testSource(String url) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(url.length() > 90 ? url.substring(0, 90) + "…" : url);
+        try {
+            if (com.sampwrap.core.DriveDownloader.isDrive(url)) {
+                sb.append("\n      Drive, id=").append(com.sampwrap.core.DriveDownloader.fileId(url));
+                long total = com.sampwrap.core.DriveDownloader.probeTotal(url);
+                sb.append("\n      total: ")
+                        .append(total > 0 ? Manifest.humanSize(total) + " (" + total + " B)" : "tidak diketahui");
+            } else {
+                java.net.HttpURLConnection c =
+                        (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                try {
+                    c.setConnectTimeout(12000);
+                    c.setReadTimeout(12000);
+                    c.setInstanceFollowRedirects(true);
+                    c.setRequestProperty("Range", "bytes=0-0");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) SAMP-PC");
+                    int code = com.sampwrap.core.ResumePolicy.status(c);
+                    String type = String.valueOf(c.getContentType());
+                    long total = -1;
+                    if (code == 206) {
+                        total = com.sampwrap.core.ResumePolicy
+                                .totalFromContentRange(c.getHeaderField("Content-Range"));
+                    } else if (code == 200) {
+                        total = c.getContentLengthLong();
+                    }
+                    sb.append("\n      HTTP ").append(code).append("  ").append(type);
+                    if (total > 0) sb.append("  total: ").append(Manifest.humanSize(total));
+                    if (code == 403) sb.append("\n      -> diblokir (kuota Drive habis / link tidak publik)");
+                    if (code == 404) sb.append("\n      -> tidak ada (file dihapus / link salah)");
+                } finally {
+                    c.disconnect();
+                }
+            }
+        } catch (Throwable t) {
+            sb.append("\n      gagal: ").append(t.getClass().getSimpleName())
+              .append(t.getMessage() == null ? "" : ": " + t.getMessage());
+        }
+        return sb.toString();
+    }
+
+    private void saveReport(String report) {
+        try {
+            File f = new File(GameDir.get(this).getParentFile(), "diagnostik.txt");
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(f)) {
+                out.write(report.getBytes("UTF-8"));
+            }
+            InstallLog.w(this, "laporan disimpan: " + f);
+            toast("Tersimpan: " + f.getAbsolutePath());
+        } catch (Throwable t) {
+            toast("Gagal menyimpan: " + t);
+        }
     }
 
     private static String topLevelNames(File dir) {

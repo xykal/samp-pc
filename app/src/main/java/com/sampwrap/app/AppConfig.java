@@ -63,6 +63,33 @@ public final class AppConfig {
         return get("pack.clientUrl", "");
     }
 
+    /**
+     * Semua sumber paket, berurutan: yang utama dulu, lalu cermin.
+     * Paket GTA SA di Drive sering diblokir kuota ("too many users…"),
+     * jadi app harus punya jalan kedua tanpa user mengubah apa pun.
+     */
+    public static java.util.List<String> packArchiveSources() {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        addUrl(out, packArchiveUrl());
+        for (String s : get("pack.mirrors", "").split("[,\\n]")) addUrl(out, s.trim());
+        return out;
+    }
+
+    /** Sumber client SA-MP (kecil, ±24 MB) — cerminnya opsional. */
+    public static java.util.List<String> packClientSources() {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        addUrl(out, packClientUrl());
+        for (String s : get("pack.clientMirrors", "").split("[,\\n]")) addUrl(out, s.trim());
+        return out;
+    }
+
+    private static void addUrl(java.util.List<String> out, String u) {
+        if (u == null) return;
+        u = u.trim();
+        if (u.isEmpty() || out.contains(u)) return;
+        out.add(u);
+    }
+
     public static String manifestUrl() {
         String base = packBaseUrl();
         if (base.isEmpty()) return "";
